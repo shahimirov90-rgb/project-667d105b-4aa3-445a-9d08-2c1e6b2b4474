@@ -64,7 +64,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       return data;
     },
   });
-  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id));
+  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id), isAdmin);
   const e2ee = keys.data;
   const plain = useQuery({
     queryKey: ["decrypted", familyId, ids.join(","), e2ee ? [...e2ee.keys.keys()].join(",") : ""],
@@ -216,7 +216,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       ) : e2ee?.status === "unsupported" ? (
         <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Этот браузер не поддерживает шифрование. Откройте чат в современном браузере (Chrome, Safari, Firefox).</p>
       ) : e2ee?.status === "waiting" ? (
-        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Он придёт автоматически, когда кто-то из родных откроет чат. Пока можно отправлять только фото и видео.</p>
+        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Владелец или администратор должен открыть чат или страницу семьи, чтобы передать ключ. Пока можно отправлять только фото и видео.</p>
       ) : null}
       <details className="border-b bg-card/60 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-semibold">🔐 Как защищена переписка</summary>
