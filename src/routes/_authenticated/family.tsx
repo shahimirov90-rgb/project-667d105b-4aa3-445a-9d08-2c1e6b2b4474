@@ -33,6 +33,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
   const invalidate = useInvalidate();
   const members = useMembers(familyId);
   const [famName, setFamName] = useState(ctx.familyName);
+  const [inviteBusy, setInviteBusy] = useState(false);
   useEffect(() => setFamName(ctx.familyName), [ctx.familyName]);
 
   const requests = useQuery({
@@ -100,16 +101,20 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
 
       {isAdmin && (
         <Section title="Приглашения" hint="Ссылка действует 14 дней. Даже по ссылке человек попадёт в семью только после вашего одобрения.">
-          <Button variant="hero" onClick={async () => {
+          <Button variant="hero" disabled={inviteBusy} onClick={async () => {
+            if (inviteBusy) return;
+            setInviteBusy(true);
             try {
               const { data, error } = await supabase.rpc("create_invite", { _family: familyId });
               if (error) throw error;
               invalidate("invites");
-              if (data) copy(data);
+              if (data) await copy(data);
             } catch (error) {
               toast.error(errText(error));
+            } finally {
+              setInviteBusy(false);
             }
-          }}><Link2 /> Создать ссылку-приглашение</Button>
+          }}>{inviteBusy ? <Loader2 className="animate-spin" /> : <Link2 />} {inviteBusy ? "Создаём…" : "Создать ссылку-приглашение"}</Button>
           <ul className="mt-4 space-y-2">
             {invites.data?.length === 0 && <li className="text-muted-foreground">Активных приглашений нет.</li>}
             {invites.data?.map((i) => (
@@ -149,7 +154,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
 
       {isAdmin && (
         <Section id="admin-settings" title="Настройки семьи">
-          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); rpc(() => supabase.from("families").update({ name: famName.trim() }).eq("id", familyId), "Название сохранено", "membership"); }}>
+          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const name = famName.trim(); if (!name) { toast.error("Введите название семьи"); return; } rpc(() => supabase.from("families").update({ name }).eq("id", familyId), "Название сохранено", "membership"); }}>
             <Input value={famName} onChange={(e) => setFamName(e.target.value)} maxLength={80} required aria-label="Название семьи" />
             <Button type="submit">Сохранить</Button>
           </form>
