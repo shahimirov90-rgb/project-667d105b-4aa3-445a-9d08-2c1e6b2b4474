@@ -135,7 +135,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
       </Section>
 
       {isAdmin && (
-        <Section title="Настройки семьи">
+        <Section title="Настройки семьи" id="settings">
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); rpc(() => supabase.from("families").update({ name: famName.trim() }).eq("id", familyId), "Название сохранено", "membership"); }}>
             <Input value={famName} onChange={(e) => setFamName(e.target.value)} maxLength={80} required aria-label="Название семьи" />
             <Button type="submit">Сохранить</Button>
