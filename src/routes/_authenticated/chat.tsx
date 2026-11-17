@@ -36,6 +36,10 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   const [highlight, setHighlight] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
   const isAdmin = role !== "member";
 
   const members = useMembers(familyId);
@@ -98,12 +102,15 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     if (!f) return;
     const v = validateMedia(f);
     if (!v.ok) { toast.error(v.error); return; }
-    if (pending) URL.revokeObjectURL(pending.preview);
-    setPending({ file: f, preview: URL.createObjectURL(f), kind: v.kind, ext: v.ext, progress: null });
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const preview = URL.createObjectURL(f);
+    previewUrlRef.current = preview;
+    setPending({ file: f, preview, kind: v.kind, ext: v.ext, progress: null });
   }
   function clearPending() {
     pending?.abort?.();
-    if (pending) URL.revokeObjectURL(pending.preview);
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = null;
     setPending(null);
   }
 
@@ -126,7 +133,8 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
       if (error) throw error;
       setText(""); setReplyTo(null);
-      if (pending) URL.revokeObjectURL(pending.preview);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
       setPending(null);
       invalidate("messages");
     } catch (err) {
