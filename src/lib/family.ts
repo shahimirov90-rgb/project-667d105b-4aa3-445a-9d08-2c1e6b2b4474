@@ -121,6 +121,25 @@ export function useProfile(userId?: string) {
   });
 }
 
+/** Sign a gallery's files in one Storage request instead of one request per thumbnail. */
+export function useSignedUrls(bucket: "family-media" | "avatars", paths?: string[]) {
+  const uniquePaths = [...new Set(paths ?? [])].sort();
+  return useQuery({
+    queryKey: ["signed-batch", bucket, uniquePaths.join("\u0000")],
+    enabled: uniquePaths.length > 0,
+    staleTime: 50 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrls(uniquePaths, 3600);
+      if (error) throw error;
+      return new Map(
+        (data ?? []).flatMap((item) =>
+          item.path && item.signedUrl ? [[item.path, item.signedUrl] as const] : [],
+        ),
+      );
+    },
+  });
+}
+
 /** Private files are only shown through short-lived signed URLs. */
 export function useSignedUrl(bucket: "family-media" | "avatars", path?: string | null) {
   return useQuery({
