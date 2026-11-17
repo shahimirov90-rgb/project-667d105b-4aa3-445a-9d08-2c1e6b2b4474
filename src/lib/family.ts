@@ -42,9 +42,25 @@ export function validateMedia(file: { type: string; size: number }):
 export function useUser() {
   const [user, setUser] = useState<User | null>(null);
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    let active = true;
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        console.warn("[Auth] Could not restore the current user", error);
+        setUser(null);
+        return;
+      }
+      setUser(data.user);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      console.warn("[Auth] Could not restore the current user", error);
+      setUser(null);
+    });
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
-    return () => data.subscription.unsubscribe();
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
   return user;
 }
