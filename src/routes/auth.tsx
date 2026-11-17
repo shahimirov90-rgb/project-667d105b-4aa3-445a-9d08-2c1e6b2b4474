@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
+import { inviteRedirectPath } from "@/lib/invite-routing";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -23,13 +24,13 @@ export const Route = createFileRoute("/auth")({
 });
 
 function nextPath() {
-  let code: string | null = null;
+  let storedCode: string | null = null;
+  let search = "";
   if (typeof window !== "undefined") {
-    try { code = sessionStorage.getItem("pendingInvite"); } catch { /* Session storage may be disabled. */ }
-    // Keep the invite through password and OAuth redirects when storage is blocked.
-    if (!code) code = new URLSearchParams(window.location.search).get("invite");
+    search = window.location.search;
+    try { storedCode = sessionStorage.getItem("pendingInvite"); } catch { /* Session storage may be disabled. */ }
   }
-  return code ? `/invite/${encodeURIComponent(code)}` : "/chat";
+  return inviteRedirectPath(search, storedCode);
 }
 
 function AuthPage() {
