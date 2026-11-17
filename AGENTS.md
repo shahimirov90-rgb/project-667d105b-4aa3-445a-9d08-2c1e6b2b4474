@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Family membership changes (create family, invites, join requests, roles, removal) go only through SECURITY DEFINER RPCs; tables have read-only RLS for these so clients cannot self-escalate.
+- Media lives in private buckets (`family-media/{family}/{user}/…`, `avatars/{user}/…`) and is shown only via short-lived signed URLs; never make buckets public.
