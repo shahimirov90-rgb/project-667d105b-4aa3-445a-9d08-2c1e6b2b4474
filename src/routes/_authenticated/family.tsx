@@ -73,6 +73,30 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
       toast.error(errText(error));
     }
   }
+  async function reviewRequest(requestId: string, approve: boolean) {
+    try {
+      const { error } = await supabase.rpc("review_request", { _request: requestId, _approve: approve });
+      if (error) {
+        const message = typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message: unknown }).message)
+          : String(error);
+        // The current SQL function raises after updating, which rolls the update
+        // back. A second call with _approve=false safely records the rejection.
+        if (approve && message.includes("Пользователь уже состоит в другой семье")) {
+          const { error: rejectError } = await supabase.rpc("review_request", { _request: requestId, _approve: false });
+          if (rejectError) throw rejectError;
+          toast.info("Пользователь уже состоит в другой семье. Заявка отклонена.");
+          invalidate("requests");
+          return;
+        }
+        throw error;
+      }
+      toast.success(approve ? "Участник добавлен" : "Заявка отклонена");
+      invalidate("requests", ...(approve ? ["members"] : []));
+    } catch (error) {
+      toast.error(errText(error));
+    }
+  }
   const link = (code: string) => `${window.location.origin}/invite/${code}`;
   async function copy(code: string) {
     try { await navigator.clipboard.writeText(link(code)); toast.success("Ссылка скопирована"); } catch { toast.info(link(code)); }
@@ -90,8 +114,8 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
                 <li key={r.id} className="flex flex-wrap items-center gap-3">
                   <UserAvatar name={r.profiles?.display_name} path={r.profiles?.avatar_path} />
                   <div className="min-w-0 flex-1"><p className="font-semibold">{r.profiles?.display_name ?? "Новый пользователь"}</p><p className="text-sm text-muted-foreground">{new Date(r.created_at).toLocaleString("ru-RU")}</p></div>
-                  <Button onClick={() => rpc(() => supabase.rpc("review_request", { _request: r.id, _approve: true }), "Участник добавлен", "requests", "members")}><Check /> Принять</Button>
-                  <Button variant="outline" onClick={() => rpc(() => supabase.rpc("review_request", { _request: r.id, _approve: false }), "Заявка отклонена", "requests")}><X /> Отклонить</Button>
+                  <Button onClick={() => reviewRequest(r.id, true)}><Check /> Принять</Button>
+                  <Button variant="outline" onClick={() => reviewRequest(r.id, false)}><X /> Отклонить</Button>
                 </li>
               ))}
             </ul>
