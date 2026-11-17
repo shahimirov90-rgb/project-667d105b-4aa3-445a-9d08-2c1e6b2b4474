@@ -11,6 +11,13 @@ describe("validateMedia", () => {
   it("rejects videos over 50 MB", () => {
     expect(validateMedia({ type: "video/mp4", size: 51 * 1024 * 1024 }).ok).toBe(false);
   });
+  it("rejects empty files", () => {
+    expect(validateMedia({ type: "image/jpeg", size: 0 }).ok).toBe(false);
+  });
+  it("rejects non-finite file sizes", () => {
+    expect(validateMedia({ type: "image/jpeg", size: Number.NaN }).ok).toBe(false);
+    expect(validateMedia({ type: "image/jpeg", size: Number.POSITIVE_INFINITY }).ok).toBe(false);
+  });
   it("rejects non-media files", () => {
     expect(validateMedia({ type: "application/pdf", size: 1000 }).ok).toBe(false);
   });
