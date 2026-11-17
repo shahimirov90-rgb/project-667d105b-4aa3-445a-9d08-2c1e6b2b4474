@@ -33,6 +33,10 @@ A Supabase publishable key is designed for client use; it is not equivalent to a
 
 The latest hardening PR has a passing GitHub Actions run: ESLint, TypeScript, Vitest, and production build. Keep these checks required for future changes.
 
+## Dependency maintenance
+
+The hardening branch adds `.github/dependabot.yml` for weekly Bun and GitHub Actions dependency updates. Review Dependabot PRs and keep the CI checks required before merging updates.
+
 ## Manual release checklist
 
 - [ ] Verify RLS for every table and storage bucket using separate accounts from different families.
