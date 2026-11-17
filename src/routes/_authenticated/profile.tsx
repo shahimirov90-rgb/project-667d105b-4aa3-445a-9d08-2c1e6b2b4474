@@ -71,8 +71,13 @@ function Profile() {
 
       // Old-file cleanup is best-effort; a cleanup failure must not undo a successful profile update.
       if (oldPath && oldPath !== path) {
-        const { error: cleanupError } = await supabase.storage.from("avatars").remove([oldPath]);
-        if (cleanupError) console.warn("Не удалось удалить старое фото профиля", cleanupError);
+        try {
+          const { error: cleanupError } = await supabase.storage.from("avatars").remove([oldPath]);
+          if (cleanupError) console.warn("Не удалось удалить старое фото профиля", cleanupError);
+        } catch (cleanupError) {
+          // The profile already points to the new avatar; cleanup must never roll it back.
+          console.warn("Не удалось удалить старое фото профиля", cleanupError);
+        }
       }
     } catch (error) {
       // Avoid leaving an orphaned upload if saving the profile reference failed.
