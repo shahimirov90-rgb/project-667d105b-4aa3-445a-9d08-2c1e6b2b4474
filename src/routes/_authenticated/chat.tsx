@@ -64,7 +64,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       return data;
     },
   });
-  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id));
+  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id), isAdmin);
   const e2ee = keys.data;
   const plain = useQuery({
     queryKey: ["decrypted", familyId, ids.join(","), e2ee ? [...e2ee.keys.keys()].join(",") : ""],
