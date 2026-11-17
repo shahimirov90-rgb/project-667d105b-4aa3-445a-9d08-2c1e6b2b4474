@@ -63,6 +63,7 @@ export function Onboarding({ userId }: { userId: string }) {
   }
 
   if (pending.isLoading) return <div className="flex justify-center py-20"><Loader2 className="size-8 animate-spin text-primary" aria-label="Загрузка" /></div>;
+  if (pending.isError) return <CenterState emoji="⚠️" title="Не удалось проверить заявку" text={errText(pending.error)}><Button variant="outline" onClick={() => pending.refetch()}>Повторить</Button></CenterState>;
 
   if (pending.data?.status === "pending") {
     return (
