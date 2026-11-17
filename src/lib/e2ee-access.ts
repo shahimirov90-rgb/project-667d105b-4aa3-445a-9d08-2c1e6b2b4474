@@ -20,7 +20,7 @@ export function canReceiveKeyVersion(joinedAt: string, keyCreatedAt: string): bo
   return joined !== null && created !== null && joined < created;
 }
 
-/** A membership created after the latest key version requires a fresh family key. */
+/** A membership not strictly earlier than the latest key version requires a fresh family key. */
 export function requiresMembershipKeyRotation(joinedAtValues: string[], latestKeyCreatedAt: string): boolean {
   return joinedAtValues.some((joinedAt) => !canReceiveKeyVersion(joinedAt, latestKeyCreatedAt));
 }
