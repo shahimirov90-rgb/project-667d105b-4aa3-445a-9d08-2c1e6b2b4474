@@ -172,9 +172,26 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
 
   async function remove(m: Msg) {
     if (!confirm("Удалить сообщение для всех?")) return;
+    // Storage DELETE is limited to the object owner. Do not let an admin delete
+    // another member's media message until a server-side cleanup operation exists.
+    if (m.media_path && m.user_id !== userId) {
+      toast.error("Пока нельзя удалить медиафайл другого участника: требуется безопасная серверная очистка.");
+      return;
+    }
     const { error } = await supabase.from("messages").delete().eq("id", m.id);
     if (error) { toast.error(errText(error)); return; }
-    if (m.media_path && m.user_id === userId) await supabase.storage.from("family-media").remove([m.media_path]);
+    if (m.media_path) {
+      try {
+        const { error: storageError } = await supabase.storage.from("family-media").remove([m.media_path]);
+        if (storageError) {
+          console.error("[Chat] Message deleted but its media cleanup failed", storageError);
+          toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
+        }
+      } catch (storageError) {
+        console.error("[Chat] Message deleted but its media cleanup failed", storageError);
+        toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
+      }
+    }
     invalidate("messages");
   }
 
