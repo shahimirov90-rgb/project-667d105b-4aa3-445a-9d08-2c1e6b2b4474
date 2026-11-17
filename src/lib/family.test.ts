@@ -22,3 +22,25 @@ describe("validateMedia", () => {
     expect(validateMedia({ type: "application/pdf", size: 1000 }).ok).toBe(false);
   });
 });
+
+describe("swAllowed", () => {
+  it("does not register outside production, in iframes, or when explicitly disabled", async () => {
+    const { swAllowed } = await import("./pwa");
+    expect(swAllowed("https://example.com", false, false)).toBe(false);
+    expect(swAllowed("https://example.com", true, true)).toBe(false);
+    expect(swAllowed("https://example.com/?sw=off", false, true)).toBe(false);
+  });
+
+  it("does not register on Lovable preview and development hosts", async () => {
+    const { swAllowed } = await import("./pwa");
+    expect(swAllowed("https://id-preview-abc--project.lovable.app", false, true)).toBe(false);
+    expect(swAllowed("https://project--abc-dev.gpt-eng.com", false, true)).toBe(false);
+    expect(swAllowed("https://my-project.lovableproject.com", false, true)).toBe(false);
+    expect(swAllowed("https://beta.lovable.dev", false, true)).toBe(false);
+  });
+
+  it("registers on a regular production host", async () => {
+    const { swAllowed } = await import("./pwa");
+    expect(swAllowed("https://family.example.com", false, true)).toBe(true);
+  });
+});
