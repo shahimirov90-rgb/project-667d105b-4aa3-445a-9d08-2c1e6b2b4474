@@ -32,7 +32,10 @@ jobs:
       # The repository currently has widespread pre-existing Prettier violations.
       # Keep ESLint's correctness rules active while formatting is handled separately.
       - name: Run ESLint
-        run: bun run lint -- --rule 'prettier/prettier: off'
+        run: bunx eslint . --rule 'prettier/prettier: off'
+
+      - name: Type-check
+        run: bunx tsc --noEmit
 
       - name: Run tests
         run: bun run test
