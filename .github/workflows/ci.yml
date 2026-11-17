@@ -3,9 +3,11 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, "audit/**", "fix/**"]
+    branches:
+      - main
+      - "audit/**"
+      - "fix/**"
   pull_request:
-    branches: [main, "audit/**"]
 
 permissions:
   contents: read
@@ -16,7 +18,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Lint and tests
+    name: Lint, type-check, tests, and build
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -30,8 +32,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The repository currently has widespread pre-existing Prettier violations.
-      # Keep ESLint's correctness rules active while formatting is handled separately.
+      # Existing repository formatting debt is handled separately; keep correctness rules active.
       - name: Run ESLint
         run: bunx eslint . --rule 'prettier/prettier: off'
 
