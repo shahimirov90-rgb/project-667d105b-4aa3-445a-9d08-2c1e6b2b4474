@@ -124,15 +124,18 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       }
       const cipher = body ? await encryptForFamily(e2ee!, familyId, userId, body) : null;
       const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
-      if (error) {
-        if (media) await supabase.storage.from("family-media").remove([media.media_path]);
-        throw error;
-      }
+      if (error) throw error;
       setText(""); setReplyTo(null);
       if (pending) URL.revokeObjectURL(pending.preview);
       setPending(null);
       invalidate("messages");
     } catch (err) {
+      // If upload succeeded but encryption or message insertion failed, remove
+      // the unattached object so failed sends do not leak private media in storage.
+      if (media) {
+        const { error: cleanupError } = await supabase.storage.from("family-media").remove([media.media_path]);
+        if (cleanupError) console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+      }
       toast.error(errText(err));
       setPending((s) => (s ? { ...s, progress: null, abort: undefined } : s));
     } finally {
