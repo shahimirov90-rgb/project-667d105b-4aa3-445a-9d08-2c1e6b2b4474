@@ -1,10 +1,21 @@
 /** E2EE key distribution rules that can be tested without a live Supabase client. */
 
-/** A member may receive only key versions created after they joined the family. */
+/** Parse Postgres ISO timestamps to microseconds; Date.parse alone loses sub-ms precision. */
+function timestampMicros(value: string): number | null {
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) return null;
+  const fraction = value.match(/\.(\d+)(?=Z|[+-]\d{2}:\d{2}$)/i)?.[1] ?? "";
+  const microseconds = Number((fraction + "000000").slice(0, 6));
+  const parsedMillisecondFraction = new Date(milliseconds).getUTCMilliseconds() * 1000;
+  const exact = milliseconds * 1000 + microseconds - parsedMillisecondFraction;
+  return Number.isSafeInteger(exact) ? exact : null;
+}
+
+/** A member may receive only key versions created at or after their join time. */
 export function canReceiveKeyVersion(joinedAt: string, keyCreatedAt: string): boolean {
-  const joined = Date.parse(joinedAt);
-  const created = Date.parse(keyCreatedAt);
-  return Number.isFinite(joined) && Number.isFinite(created) && joined <= created;
+  const joined = timestampMicros(joinedAt);
+  const created = timestampMicros(keyCreatedAt);
+  return joined !== null && created !== null && joined <= created;
 }
 
 /** Rotate whenever the active-device set and latest-version share set differ. */
