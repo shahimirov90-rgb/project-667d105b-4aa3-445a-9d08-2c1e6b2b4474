@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { inviteRedirectPath } from "./invite-routing";
 
 describe("inviteRedirectPath", () => {
-  it("prefers the invite saved in session storage", () => {
-    expect(inviteRedirectPath("?invite=from-url", "from-storage")).toBe("/invite/from-storage");
+  it("prefers the current URL invite over stale session storage", () => {
+    expect(inviteRedirectPath("?invite=from-url", "stale-storage")).toBe("/invite/from-url");
+  });
+
+  it("uses session storage when there is no URL invite", () => {
+    expect(inviteRedirectPath("", "from-storage")).toBe("/invite/from-storage");
   });
 
   it("uses the URL parameter when storage is unavailable", () => {
