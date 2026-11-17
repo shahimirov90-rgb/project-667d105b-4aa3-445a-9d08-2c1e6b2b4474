@@ -30,13 +30,6 @@ export default defineConfig({
           navigateFallback: null,
           globPatterns: ["**/*.{js,css,png,svg,ico,woff2,webmanifest}"],
           cleanupOutdatedCaches: true,
-          runtimeCaching: [
-            {
-              urlPattern: ({ request, url }) => request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
-              handler: "NetworkFirst",
-              options: { cacheName: "pages", networkTimeoutSeconds: 4, expiration: { maxEntries: 20 } },
-            },
-          ],
         },
       }),
     ],
