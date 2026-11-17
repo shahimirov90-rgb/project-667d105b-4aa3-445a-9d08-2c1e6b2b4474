@@ -14,7 +14,9 @@
     "test:watch": "vitest"
   },
   "overrides": {
-    "rolldown": "1.2.1"
+    "rolldown": "1.2.1",
+    "brace-expansion@^2.0.1": "2.1.9",
+    "picomatch@^4.0.5": "4.0.8"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
