@@ -126,11 +126,13 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     let media: { media_path: string; media_type: string; media_mime: string; media_size: number } | null = null;
     try {
       if (pending) {
-        const path = `${familyId}/${userId}/${crypto.randomUUID()}.${pending.ext}`;
+        const path = [familyId, userId, crypto.randomUUID() + "." + pending.ext].join("/");
+        // Track the intended object before upload starts so an aborted/failed
+        // transfer can also attempt to remove a partially persisted object.
+        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
         const up = uploadWithProgress("family-media", path, pending.file, (p) => setPending((s) => (s ? { ...s, progress: p } : s)));
         setPending((s) => (s ? { ...s, progress: 0, abort: up.abort } : s));
         await up.promise;
-        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
       }
       const cipher = body ? await encryptForFamily(e2ee!, familyId, userId, body) : null;
       const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
@@ -313,7 +315,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
                 <p className="text-xs text-muted-foreground">{(pending.file.size / 1024 / 1024).toFixed(1)} МБ</p>
                 {pending.progress !== null && <Progress value={pending.progress} className="mt-1" aria-label={`Загрузка ${pending.progress}%`} />}
               </div>
-              <Button type="button" variant="ghost" size="sm" aria-label={pending.progress !== null ? "Отменить загрузку" : "Убрать файл"} onClick={clearPending}><X /></Button>
+              <Button type="button" variant="ghost" size="sm" aria-label={pending.progress !== null ? "Отменить загрузку" : "Убрать файл"} onClick={clearPending} disabled={sending && !pending.abort}><X /></Button>
             </div>
           )}
           <div className="flex items-end gap-2">
