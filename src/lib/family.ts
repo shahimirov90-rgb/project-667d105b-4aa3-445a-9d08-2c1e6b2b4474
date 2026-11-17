@@ -135,25 +135,38 @@ export function uploadWithProgress(
   onProgress: (pct: number) => void,
 ): { promise: Promise<void>; abort: () => void } {
   const xhr = new XMLHttpRequest();
+  let aborted = false;
   const promise = (async () => {
-    const { data } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
     const token = data.session?.access_token;
     if (!token) throw new Error("Сессия истекла, войдите снова");
-    const url = `${import.meta.env['VITE_SUPABASE_URL']}/storage/v1/object/${bucket}/${path}`;
+    if (aborted) throw new Error("Загрузка отменена");
+    const url = String(import.meta.env['VITE_SUPABASE_URL']) + "/storage/v1/object/" + bucket + "/" + path;
     await new Promise<void>((resolve, reject) => {
       xhr.open("POST", url);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
       xhr.setRequestHeader("apikey", import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY']);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.setRequestHeader("x-upsert", "false");
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error("Не удалось загрузить файл")));
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Не удалось загрузить файл")));
       xhr.onerror = () => reject(new Error("Ошибка сети при загрузке"));
       xhr.onabort = () => reject(new Error("Загрузка отменена"));
+      if (aborted) {
+        reject(new Error("Загрузка отменена"));
+        return;
+      }
       xhr.send(file);
     });
   })();
-  return { promise, abort: () => xhr.abort() };
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+      xhr.abort();
+    },
+  };
 }
 
 export function formatTime(iso: string) {
