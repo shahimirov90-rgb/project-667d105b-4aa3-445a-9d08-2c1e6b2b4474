@@ -17,5 +17,5 @@ export function FamilyGate({ title, wide, children }: { title: string; wide?: bo
     return <AppShell title={title}><CenterState emoji="⚠️" title="Не удалось загрузить данные" text="Проверьте соединение с интернетом."><Button onClick={() => m.refetch()}>Повторить</Button></CenterState></AppShell>;
   if (!m.data) return <AppShell title="Семейный круг"><Onboarding userId={user.id} /></AppShell>;
   const ctx: FamilyCtx = { userId: user.id, familyId: m.data.family_id, familyName: m.data.families?.name ?? "Семья", role: m.data.role };
-  return <AppShell title={title === "__family" ? ctx.familyName : title} wide={wide}>{children(ctx)}</AppShell>;
+  return <AppShell title={title === "__family" ? ctx.familyName : title} wide={wide} admin={ctx.role !== "member"}>{children(ctx)}</AppShell>;
 }
