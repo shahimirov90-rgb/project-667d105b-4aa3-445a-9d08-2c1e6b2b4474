@@ -63,10 +63,14 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
   }, [familyId, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function rpc(fn: () => PromiseLike<{ error: unknown }>, ok: string, ...keys: string[]) {
-    const { error } = await fn();
-    if (error) { toast.error(errText(error)); return; }
-    toast.success(ok);
-    invalidate(...keys);
+    try {
+      const { error } = await fn();
+      if (error) throw error;
+      toast.success(ok);
+      invalidate(...keys);
+    } catch (error) {
+      toast.error(errText(error));
+    }
   }
   const link = (code: string) => `${window.location.origin}/invite/${code}`;
   async function copy(code: string) {
@@ -96,7 +100,16 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
 
       {isAdmin && (
         <Section title="Приглашения" hint="Ссылка действует 14 дней. Даже по ссылке человек попадёт в семью только после вашего одобрения.">
-          <Button variant="hero" onClick={async () => { const { data, error } = await supabase.rpc("create_invite", { _family: familyId }); if (error) { toast.error(errText(error)); return; } invalidate("invites"); if (data) copy(data); }}><Link2 /> Создать ссылку-приглашение</Button>
+          <Button variant="hero" onClick={async () => {
+            try {
+              const { data, error } = await supabase.rpc("create_invite", { _family: familyId });
+              if (error) throw error;
+              invalidate("invites");
+              if (data) copy(data);
+            } catch (error) {
+              toast.error(errText(error));
+            }
+          }}><Link2 /> Создать ссылку-приглашение</Button>
           <ul className="mt-4 space-y-2">
             {invites.data?.length === 0 && <li className="text-muted-foreground">Активных приглашений нет.</li>}
             {invites.data?.map((i) => (
