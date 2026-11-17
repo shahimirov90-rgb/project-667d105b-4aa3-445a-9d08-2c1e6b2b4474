@@ -51,3 +51,11 @@ The hardening branch adds `.github/dependabot.yml` for weekly Bun and GitHub Act
 ## Scope and limitations
 
 This review was based on selected source files and live database policy metadata. It did not include a complete source audit, authenticated end-to-end attack testing, dependency audit, production configuration review, or credential-history scan. Findings should be verified before release.
+
+### Medium priority: gallery signed-URL request volume
+
+The gallery now requests signed URLs for its visible media set in one Storage batch rather than issuing one request per thumbnail. The batch is cached for 50 minutes, while individual media viewers continue to use short-lived signed URLs. This reduces request fan-out for large family galleries without making the bucket public.
+
+### Dependency audit exception under review
+
+The latest Bun audit reported a high-severity Zod advisory affecting versions below 4.6.6. The project currently resolves Zod 3.x through build tooling; upstream has no patched 3.x release. Do not force a global Zod 4 override without checking TanStack tooling compatibility. Track the migration separately and keep the advisory visible until the dependency graph is safely migrated or the affected path is proven unreachable.
