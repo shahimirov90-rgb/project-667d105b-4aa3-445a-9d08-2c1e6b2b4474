@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
+import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
 
 describe("E2EE family key access", () => {
   it("allows a member to receive versions created after they joined", () => {
@@ -14,6 +14,16 @@ describe("E2EE family key access", () => {
   it("rejects invalid timestamps rather than granting access", () => {
     expect(canReceiveKeyVersion("invalid", "2026-01-01T10:00:00.000Z")).toBe(false);
     expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "invalid")).toBe(false);
+  });
+
+
+  it("allows owners and admins to distribute keys to another member device", () => {
+    expect(canDistributeKeyTo("admin-user", "member-user", true)).toBe(true);
+  });
+
+  it("allows a regular member to provision only their own devices", () => {
+    expect(canDistributeKeyTo("member-user", "member-user", false)).toBe(true);
+    expect(canDistributeKeyTo("member-user", "other-user", false)).toBe(false);
   });
 
   it("rotates when a new active device has no latest key share", () => {
