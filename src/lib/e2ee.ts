@@ -69,7 +69,7 @@ async function createVersion(familyId: string, userId: string, version: number, 
   return true;
 }
 
-export async function syncFamilyKeys(familyId: string, userId: string, memberIds: string[], attempt = 0): Promise<E2EEState> {
+export async function syncFamilyKeys(familyId: string, userId: string, memberIds: string[], canManageKeys: boolean, attempt = 0): Promise<E2EEState> {
   if (!e2eeSupported()) return { status: "unsupported", keys: new Map(), current: null, fingerprint: null };
   const me = await ensureDevice(userId);
   const [versions, shares, devs] = await Promise.all([
@@ -84,9 +84,10 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   const activeIds = new Set(devices.map((d) => d.id));
 
   if (!versions.data.length) {
+    if (!canManageKeys) return { status: "waiting", keys: new Map(), current: null, fingerprint: await fingerprint(me.publicJwk) };
     if (attempt >= 3) throw new Error("Не удалось создать ключ шифрования семьи");
     await createVersion(familyId, userId, 1, devices);
-    return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
   }
 
   const keys = new Map<number, CryptoKey>();
@@ -98,16 +99,15 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   const latest = Math.max(...versions.data.map((v) => v.version));
   const fp = await fingerprint(me.publicJwk);
 
-  // Check for former-member or revoked-device shares BEFORE requiring this device to
-  // possess the latest key. Otherwise, if the removed device was the only holder of
-  // that version, every remaining device would wait forever and never rotate it.
+  // Detect former-member/revoked-device shares and orphaned versions before requiring
+  // this device to hold the latest key. Only an owner/admin may rotate the family key.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  // A version row can survive if its creator closed the tab or a share upload failed
-  // after inserting the version. With no shares, there is no recoverable key material.
-  // Skip that orphaned version instead of leaving every family device stuck in "waiting".
-  if ((latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id))) && attempt < 3) {
+  const needsRotation = latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id));
+  if (needsRotation) {
+    if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
+    if (attempt >= 3) throw new Error("Не удалось обновить ключ шифрования семьи");
     await createVersion(familyId, userId, latest + 1, devices);
-    return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
   }
 
   const latestKey = keys.get(latest);
@@ -117,18 +117,18 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   // (new relatives after approval, relatives' new phones/browsers).
   for (const [v, k] of keys) {
     const have = new Set(shares.data.filter((s) => s.version === v).map((s) => s.device_id));
-    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id)));
+    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id) && (canManageKeys || d.user_id === userId)));
   }
   return { status: "ready", keys, current: latest, fingerprint: fp };
 }
 
-export function useFamilyKeys(familyId: string, userId: string, memberIds: string[] | undefined) {
+export function useFamilyKeys(familyId: string, userId: string, memberIds: string[] | undefined, canManageKeys: boolean) {
   return useQuery({
-    queryKey: ["e2ee", familyId, userId, (memberIds ?? []).slice().sort().join(",")],
+    queryKey: ["e2ee", familyId, userId, canManageKeys, (memberIds ?? []).slice().sort().join(",")],
     enabled: !!memberIds?.length,
     structuralSharing: false,
     refetchInterval: 20000,
-    queryFn: () => syncFamilyKeys(familyId, userId, memberIds!),
+    queryFn: () => syncFamilyKeys(familyId, userId, memberIds!, canManageKeys),
   });
 }
 
