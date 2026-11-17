@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Images, LogOut, MessageCircleHeart, UserRound, Users } from "lucide-react";
+import { Images, LogOut, MessageCircleHeart, Settings, UserRound, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,10 @@ const NAV = [
   { to: "/profile", label: "Профиль", icon: UserRound },
 ] as const;
 
-export function AppShell({ title, children, wide }: { title: string; children: ReactNode; wide?: boolean | undefined }) {
+export function AppShell({ title, children, wide, admin }: { title: string; children: ReactNode; wide?: boolean | undefined; admin?: boolean | undefined }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  async function signOut() {
+  const items = admin ? [...NAV, { to: "/family" as const, label: "Настройки", icon: Settings }] : NAV;\n  async function signOut() {
     await qc.cancelQueries();
     qc.clear();
     await supabase.auth.signOut();
@@ -28,8 +28,8 @@ export function AppShell({ title, children, wide }: { title: string; children: R
           <span aria-hidden>🏡</span> Семейный круг
         </Link>
         <nav className="flex flex-col gap-1" aria-label="Основное меню">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to} className="flex items-center gap-3 rounded-xl px-4 py-3 text-lg font-semibold text-sidebar-foreground hover:bg-sidebar-accent" activeProps={{ className: "bg-sidebar-accent text-primary" }}>
+          {items.map(({ to, label, icon: Icon }) => (
+            <Link key={`${to}-${label}`} to={to} hash={label === "Настройки" ? "settings" : undefined} className="flex items-center gap-3 rounded-xl px-4 py-3 text-lg font-semibold text-sidebar-foreground hover:bg-sidebar-accent" activeProps={{ className: "bg-sidebar-accent text-primary" }}>
               <Icon className="size-5" aria-hidden /> {label}
             </Link>
           ))}
