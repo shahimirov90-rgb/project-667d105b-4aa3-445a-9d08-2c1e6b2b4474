@@ -97,7 +97,7 @@ function Profile() {
   }
 
   return (
-    <AppShell title="Профиль" role={membership.data?.role ?? undefined}>
+    <AppShell title="Профиль" {...(membership.data ? { role: membership.data.role } : {})}>
       <div className="mx-auto max-w-md p-6">
         {profile.isLoading ? <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-label="Загрузка" /> : profile.isError ? <div role="alert" className="rounded-2xl border bg-card p-6 text-center"><p className="text-destructive">{errText(profile.error)}</p><Button type="button" variant="outline" className="mt-3" onClick={() => profile.refetch()}>Повторить</Button></div> : (
           <form onSubmit={save} className="rounded-3xl border bg-card p-6 shadow-soft">
