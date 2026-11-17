@@ -27,31 +27,62 @@ function Profile() {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) { toast.error("Введите имя"); return; }
+    const displayName = name.trim().slice(0, 60);
+    if (!displayName) { toast.error("Введите имя"); return; }
     setBusy(true);
-    const { error } = await supabase.from("profiles").update({ display_name: name.trim().slice(0, 60) }).eq("id", user.id);
-    setBusy(false);
-    if (error) { toast.error(errText(error)); return; }
-    toast.success("Сохранено");
-    invalidate("profile", "members");
+    try {
+      const { error } = await supabase.from("profiles").update({ display_name: displayName }).eq("id", user.id);
+      if (error) throw error;
+      toast.success("Сохранено");
+      invalidate("profile", "members");
+    } catch (error) {
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function avatar(f?: File) {
-    if (!f) return;
-    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[f.type];
+  async function avatar(file?: File) {
+    if (!file) return;
+    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
     if (!ext) { toast.error("Подойдёт фото JPG, PNG или WEBP"); return; }
-    if (f.size > MAX_AVATAR_BYTES) { toast.error("Фото больше 5 МБ"); return; }
+    if (file.size === 0) { toast.error("Файл пустой"); return; }
+    if (file.size > MAX_AVATAR_BYTES) { toast.error("Фото больше 5 МБ"); return; }
+
     setBusy(true);
     const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("avatars").upload(path, f, { contentType: f.type });
-    if (!error) {
-      const old = profile.data?.avatar_path;
-      await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
-      if (old) await supabase.storage.from("avatars").remove([old]);
+    let uploaded = false;
+    try {
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (uploadError) throw uploadError;
+      uploaded = true;
+
+      // Keep the previous avatar until the profile points to the new file.
+      const { error: profileError } = await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
+      if (profileError) throw profileError;
+
+      const oldPath = profile.data?.avatar_path;
       invalidate("profile", "members");
       toast.success("Фото обновлено");
-    } else toast.error(errText(error));
-    setBusy(false);
+
+      // Old-file cleanup is best-effort; a cleanup failure must not undo a successful profile update.
+      if (oldPath && oldPath !== path) {
+        const { error: cleanupError } = await supabase.storage.from("avatars").remove([oldPath]);
+        if (cleanupError) console.warn("Не удалось удалить старое фото профиля", cleanupError);
+      }
+    } catch (error) {
+      // Avoid leaving an orphaned upload if saving the profile reference failed.
+      if (uploaded) {
+        const { error: cleanupError } = await supabase.storage.from("avatars").remove([path]);
+        if (cleanupError) console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+      }
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
