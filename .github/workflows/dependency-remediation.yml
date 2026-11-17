@@ -1,0 +1,65 @@
+name: Dependency remediation
+
+on:
+  push:
+    branches:
+      - "audit/security-hardening"
+    paths:
+      - ".github/workflows/dependency-remediation.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dependency-remediation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out hardening branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Update Vite to its patched 8.1 release
+        run: bun add --dev vite@8.1.7
+
+      - name: Apply compatible transitive security updates
+        run: bun audit fix
+
+      - name: Commit refreshed dependency lock
+        run: |
+          if ! git diff --quiet -- package.json bun.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json bun.lock
+            git commit -m "fix(deps): patch vulnerable transitive packages"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "No dependency lock changes were needed."
+          fi
+
+      - name: Verify dependency audit
+        run: bun audit --audit-level=high
+
+      - name: Run ESLint
+        run: bunx eslint . --rule "prettier/prettier: off"
+
+      - name: Type-check
+        run: bunx tsc --noEmit
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build production app
+        run: bun run build
