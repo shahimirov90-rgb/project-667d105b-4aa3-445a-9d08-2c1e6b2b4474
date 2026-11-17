@@ -68,7 +68,7 @@ function InvitePage() {
     try {
       const { error } = await supabase.rpc("request_join", { _code: code });
       if (error) throw error;
-      sessionStorage.removeItem("pendingInvite");
+      try { sessionStorage.removeItem("pendingInvite"); } catch { /* The join request already succeeded. */ }
       toast.success("Заявка отправлена владельцу семьи");
       navigate({ to: "/chat" });
     } catch (error) {
