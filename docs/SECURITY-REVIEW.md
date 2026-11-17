@@ -56,7 +56,7 @@ The current lockfile still resolves Picomatch 4.0.5/4.0.7 through build tooling.
 
 ## Scope and limitations
 
-This review was based on selected source files and live database policy metadata. It did not include a complete source audit, authenticated end-to-end attack testing, dependency audit, production configuration review, or credential-history scan. Findings should be verified before release.
+This review covered the changed source paths, selected adjacent code, current Bun lockfile, and live database policy metadata. It did not include a complete source audit, authenticated end-to-end attack testing, a full production configuration review, or a full credential-history scan. Findings should be verified before release.
 
 ### Medium priority: gallery signed-URL request volume
 
@@ -68,4 +68,4 @@ The latest Bun audit reported a high-severity Zod advisory affecting versions be
 
 ### Dependency advisories without a published fix
 
-The dependency graph has been refreshed to patched releases where upstream provides compatible versions, including Vite 8.1.7, shell-quote 1.11.0, js-yaml 4.3.2, launch-editor 2.14.2, nanoid 3.3.18, and source-map-js 1.2.2. The direct Zod 3 dependency was removed after the TanStack router toolchain moved to Zod 4.6.6; the current lockfile resolves only the patched 4.6.6 release. Picomatch up to 4.0.7 remains a documented build-tooling advisory with no published patched release. The CI audit blocks critical and all other high findings while explicitly excluding only this upstream-unpatched Picomatch advisory.
+The dependency graph has been refreshed to patched releases where upstream provides compatible versions, including Vite 8.1.7, shell-quote 1.11.0, js-yaml 4.3.2, launch-editor 2.14.2, nanoid 3.3.18, and source-map-js 1.2.2. The unused direct Zod 3 development dependency was removed; the TanStack router toolchain already resolves the patched Zod 4.6.6 release. Picomatch up to 4.0.7 remains a documented build-tooling advisory with no published patched release. The CI audit blocks critical and all other high findings while explicitly excluding only this upstream-unpatched Picomatch advisory.
