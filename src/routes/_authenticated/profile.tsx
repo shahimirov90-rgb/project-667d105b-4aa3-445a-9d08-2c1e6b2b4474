@@ -47,7 +47,7 @@ function Profile() {
     if (!file) return;
     const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
     if (!ext) { toast.error("Подойдёт фото JPG, PNG или WEBP"); return; }
-    if (file.size === 0) { toast.error("Файл пустой"); return; }
+    if (!Number.isFinite(file.size) || file.size <= 0) { toast.error("Файл пустой или имеет неверный размер"); return; }
     if (file.size > MAX_AVATAR_BYTES) { toast.error("Фото больше 5 МБ"); return; }
 
     setBusy(true);
@@ -82,8 +82,13 @@ function Profile() {
     } catch (error) {
       // Avoid leaving an orphaned upload if saving the profile reference failed.
       if (uploaded) {
-        const { error: cleanupError } = await supabase.storage.from("avatars").remove([path]);
-        if (cleanupError) console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+        try {
+          const { error: cleanupError } = await supabase.storage.from("avatars").remove([path]);
+          if (cleanupError) console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+        } catch (cleanupError) {
+          // Preserve the original profile-save error if best-effort cleanup also fails.
+          console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+        }
       }
       toast.error(errText(error));
     } finally {
