@@ -16,11 +16,25 @@ function idb(): Promise<IDBDatabase> {
 }
 async function idbGet(userId: string): Promise<StoredDevice | undefined> {
   const db = await idb();
-  return new Promise((res, rej) => { const r = db.transaction(STORE).objectStore(STORE).get(userId); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE);
+    const r = tx.objectStore(STORE).get(userId);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => { db.close(); rej(tx.error); };
+    tx.onabort = () => { db.close(); rej(tx.error); };
+  });
 }
 async function idbPut(userId: string, v: StoredDevice) {
   const db = await idb();
-  return new Promise<void>((res, rej) => { const t = db.transaction(STORE, "readwrite"); t.objectStore(STORE).put(v, userId); t.oncomplete = () => res(); t.onerror = () => rej(t.error); });
+  return new Promise<void>((res, rej) => {
+    const t = db.transaction(STORE, "readwrite");
+    t.objectStore(STORE).put(v, userId);
+    t.oncomplete = () => { db.close(); res(); };
+    t.onerror = () => { db.close(); rej(t.error); };
+    t.onabort = () => { db.close(); rej(t.error); };
+  });
 }
 
 async function ensureDevice(userId: string): Promise<StoredDevice> {
