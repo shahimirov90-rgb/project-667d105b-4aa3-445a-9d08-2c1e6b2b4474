@@ -95,8 +95,30 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   }
   const latest = Math.max(...versions.data.map((v) => v.version));
   const fp = await fingerprint(me.publicJwk);
+
+  // Distribute every key this device already holds BEFORE checking the latest version.
+  // Otherwise a new browser cannot receive older keys from an online relative while it
+  // is still waiting for the newest key.
+  for (const [v, k] of keys) {
+    const have = new Set(shares.data.filter((s) => s.version === v).map((s) => s.device_id));
+    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id)));
+  }
+
   const latestKey = keys.get(latest);
-  if (!latestKey) return { status: "waiting", keys, current: null, fingerprint: fp };
+  if (!latestKey) {
+    // A version row can survive if its creator closed the browser before publishing
+    // the wrapped key shares. If no active device has that version, an online device
+    // holding an older key can safely rotate forward and publish a fresh key.
+    const latestHolders = shares.data
+      .filter((s) => s.version === latest)
+      .map((s) => s.device_id);
+    const hasActiveLatestHolder = latestHolders.some((id) => activeIds.has(id));
+    if (!hasActiveLatestHolder && keys.size > 0 && attempt < 3) {
+      await createVersion(familyId, userId, latest + 1, devices);
+      return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
+    }
+    return { status: "waiting", keys, current: null, fingerprint: fp };
+  }
 
   // Rotation: the latest key was given to a device that no longer belongs to a current member
   // (member removed / left, or device revoked) → create a new key for current members only.
@@ -106,12 +128,6 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
     return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
   }
 
-  // Distribution: give every key version this device holds to member devices that don't have it yet
-  // (new relatives after approval, relatives' new phones/browsers).
-  for (const [v, k] of keys) {
-    const have = new Set(shares.data.filter((s) => s.version === v).map((s) => s.device_id));
-    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id)));
-  }
   return { status: "ready", keys, current: latest, fingerprint: fp };
 }
 
