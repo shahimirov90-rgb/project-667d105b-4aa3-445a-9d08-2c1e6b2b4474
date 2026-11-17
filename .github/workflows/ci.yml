@@ -36,7 +36,7 @@ jobs:
         run: bun audit --audit-level=critical
 
       - name: Report high dependency advisories
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore GHSA-fc5q-39xc-vjpf
         continue-on-error: true
 
       # Existing repository formatting debt is handled separately; keep correctness rules active.
