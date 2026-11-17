@@ -10,7 +10,11 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { installPreviewStorageGuard } from "@/lib/preview-storage-guard";
 import { supabase } from "@/integrations/supabase/client";
+
+// Run before the generated Supabase client first accesses the preview storage adapter.
+installPreviewStorageGuard();
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
