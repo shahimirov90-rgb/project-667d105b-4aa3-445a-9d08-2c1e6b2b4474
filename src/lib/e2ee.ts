@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { decryptText, e2eeSupported, encryptText, exportPublicJwk, fingerprint, generateDeviceKeyPair, generateFamilyKey, unwrapFamilyKey, wrapFamilyKey } from "./e2ee-crypto";
+import { canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
 
 /* ---------- device key storage (IndexedDB, private key non-extractable) ---------- */
 type StoredDevice = { deviceId: string; privateKey: CryptoKey; publicJwk: JsonWebKey };
@@ -86,14 +87,17 @@ async function createVersion(familyId: string, userId: string, version: number, 
 export async function syncFamilyKeys(familyId: string, userId: string, memberIds: string[], canManageKeys: boolean, attempt = 0): Promise<E2EEState> {
   if (!e2eeSupported()) return { status: "unsupported", keys: new Map(), current: null, fingerprint: null };
   const me = await ensureDevice(userId);
-  const [versions, shares, devs] = await Promise.all([
-    supabase.from("family_keys").select("version").eq("family_id", familyId),
+  const [versions, shares, devs, memberships] = await Promise.all([
+    supabase.from("family_keys").select("version, created_at").eq("family_id", familyId),
     supabase.from("family_key_shares").select("version, device_id, eph_public_key, iv, wrapped_key").eq("family_id", familyId),
     supabase.from("device_keys").select("id, user_id, public_key").in("user_id", memberIds).is("revoked_at", null),
+    supabase.from("family_members").select("user_id, joined_at").eq("family_id", familyId),
   ]);
   if (versions.error) throw versions.error;
   if (shares.error) throw shares.error;
   if (devs.error) throw devs.error;
+  if (memberships.error) throw memberships.error;
+  const joinedAtByUser = new Map(memberships.data.map((m) => [m.user_id, m.joined_at]));
   const devices = (devs.data as unknown as Device[]).filter((d) => memberIds.includes(d.user_id));
   const activeIds = new Set(devices.map((d) => d.id));
 
@@ -116,7 +120,9 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   // Detect former-member/revoked-device shares and orphaned versions before requiring
   // this device to hold the latest key. Only an owner/admin may rotate the family key.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  const needsRotation = latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id));
+  // Rotate when a new active device appears as well as when a removed device
+  // still has a share. This ensures a newly approved member gets a fresh key.
+  const needsRotation = requiresFamilyKeyRotation([...activeIds], latestHolders);
   if (needsRotation) {
     if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
     if (attempt >= 3) throw new Error("Не удалось обновить ключ шифрования семьи");
@@ -138,8 +144,17 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   // Distribution: give every key version this device holds to member devices that don't have it yet
   // (new relatives after approval, relatives' new phones/browsers).
   for (const [v, k] of keys) {
+    const version = versions.data.find((item) => item.version === v);
+    if (!version) continue;
     const have = new Set(shares.data.filter((s) => s.version === v).map((s) => s.device_id));
-    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id) && (canManageKeys || d.user_id === userId)));
+    // Existing members can restore their history on a replacement device.
+    // A newly joined member receives only versions created after joining.
+    const eligible = devices.filter((d) => {
+      if (have.has(d.id)) return false;
+      const joinedAt = joinedAtByUser.get(d.user_id);
+      return !!joinedAt && canReceiveKeyVersion(joinedAt, version.created_at);
+    });
+    await shareTo(familyId, userId, v, k, eligible);
   }
   return { status: "ready", keys, current: latest, fingerprint: fp };
 }
