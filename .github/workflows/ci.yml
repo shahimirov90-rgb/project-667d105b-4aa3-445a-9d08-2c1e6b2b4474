@@ -67,15 +67,15 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install without lifecycle scripts
-        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Resolve package ranges without lifecycle scripts
+        run: bun install --ignore-scripts
 
       - name: Apply compatible audit fixes
         id: fix
         shell: bash
         run: |
           set +e
-          bun audit fix --ignore-scripts
+          bun audit fix
           set -e
           if git diff --quiet -- package.json bun.lock; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
