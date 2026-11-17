@@ -37,6 +37,12 @@ The latest hardening PR has a passing GitHub Actions run: ESLint, TypeScript, Vi
 
 The hardening branch adds `.github/dependabot.yml` for weekly Bun and GitHub Actions dependency updates. Review Dependabot PRs and keep the CI checks required before merging updates.
 
+## Current dependency audit exception
+
+The unused direct Zod 3 development dependency has been removed; no application source imports Zod. The remaining Zod 4.6.6 copies are used by the TanStack router toolchain and are at or above the upstream patched version for [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
+
+The current lockfile still resolves Picomatch 4.0.5/4.0.7 through build tooling. [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) reports versions through 4.0.7 as affected but lists no patched version. The app does not accept user-supplied glob patterns; the dependency is used by the build/dev toolchain. CI blocks critical advisories and blocks other high advisories, while temporarily ignoring only this unpatched Picomatch advisory. Revisit the exception as soon as upstream publishes a fixed release.
+
 ## Manual release checklist
 
 - [ ] Verify RLS for every table and storage bucket using separate accounts from different families.
