@@ -84,7 +84,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
 
       {isAdmin && (
         <Section title="Заявки на вступление" hint="Одобряйте только тех, кого знаете лично.">
-          {requests.isLoading ? <Loader2 className="animate-spin" aria-label="Загрузка" /> : !requests.data?.length ? <p className="text-muted-foreground">Новых заявок нет.</p> : (
+          {requests.isLoading ? <Loader2 className="animate-spin" aria-label="Загрузка" /> : requests.isError ? <div role="alert" className="text-sm text-destructive">{errText(requests.error)} <Button variant="outline" size="sm" onClick={() => requests.refetch()}>Повторить</Button></div> : !requests.data?.length ? <p className="text-muted-foreground">Новых заявок нет.</p> : (
             <ul className="space-y-3">
               {requests.data.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-3">
@@ -116,7 +116,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
             }
           }}>{inviteBusy ? <Loader2 className="animate-spin" /> : <Link2 />} {inviteBusy ? "Создаём…" : "Создать ссылку-приглашение"}</Button>
           <ul className="mt-4 space-y-2">
-            {invites.data?.length === 0 && <li className="text-muted-foreground">Активных приглашений нет.</li>}
+            {invites.isError && <li role="alert" className="text-sm text-destructive">{errText(invites.error)} <Button variant="outline" size="sm" onClick={() => invites.refetch()}>Повторить</Button></li>}{!invites.isError && invites.data?.length === 0 && <li className="text-muted-foreground">Активных приглашений нет.</li>}
             {invites.data?.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-muted p-3">
                 <code className="flex-1 text-lg font-bold tracking-wider">{i.code}</code>
@@ -130,7 +130,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
       )}
 
       <Section title={`Участники (${members.data?.length ?? "…"})`}>
-        {members.isLoading ? <Loader2 className="animate-spin" aria-label="Загрузка" /> : (
+        {members.isLoading ? <Loader2 className="animate-spin" aria-label="Загрузка" /> : members.isError ? <div role="alert" className="text-sm text-destructive">{errText(members.error)} <Button variant="outline" size="sm" onClick={() => members.refetch()}>Повторить</Button></div> : (
           <ul className="space-y-3">
             {members.data?.map((m) => {
               const canRemove = m.user_id !== userId && m.role !== "owner" && (role === "owner" || (role === "admin" && m.role === "member"));
