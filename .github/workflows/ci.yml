@@ -34,7 +34,8 @@ jobs:
 
       # Existing repository formatting debt is handled separately; keep correctness rules active.
       - name: Run ESLint
-        run: bunx eslint . --rule 'prettier/prettier: off'
+        run: >-
+          bunx eslint . --rule "prettier/prettier: off"
 
       - name: Type-check
         run: bunx tsc --noEmit
