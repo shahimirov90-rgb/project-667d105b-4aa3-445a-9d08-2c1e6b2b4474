@@ -26,7 +26,9 @@ async function idbPut(userId: string, v: StoredDevice) {
 async function ensureDevice(userId: string): Promise<StoredDevice> {
   const saved = await idbGet(userId);
   if (saved) {
-    const { data } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    const { data, error } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    // A transient database/network error must not silently register a second device.
+    if (error) throw error;
     if (data && !data.revoked_at) return saved;
   }
   const pair = await generateDeviceKeyPair();
