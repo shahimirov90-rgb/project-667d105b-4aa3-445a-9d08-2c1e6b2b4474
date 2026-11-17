@@ -14,6 +14,7 @@ describe("E2EE family key access", () => {
   it("rejects invalid timestamps rather than granting access", () => {
     expect(canReceiveKeyVersion("invalid", "2026-01-01T10:00:00.000Z")).toBe(false);
     expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "invalid")).toBe(false);
+    expect(canReceiveKeyVersion("2026-01-01T10:00:00", "2026-01-01T10:00:01")).toBe(false);
   });
 
   it("preserves microsecond ordering when timestamps fall in the same millisecond", () => {
