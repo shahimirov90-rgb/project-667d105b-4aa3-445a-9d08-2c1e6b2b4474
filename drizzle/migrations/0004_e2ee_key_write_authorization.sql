@@ -18,13 +18,20 @@ CREATE POLICY "key shares insert authorized devices" ON public.family_key_shares
     AND EXISTS (
       SELECT 1
       FROM public.device_keys d
-      JOIN public.family_members fm ON fm.user_id = d.user_id
+      JOIN public.family_members recipient
+        ON recipient.user_id = d.user_id
+       AND recipient.family_id = family_key_shares.family_id
       WHERE d.id = family_key_shares.device_id
         AND d.revoked_at IS NULL
-        AND fm.family_id = family_key_shares.family_id
         AND (
-          fm.role IN ('owner', 'admin')
-          OR d.user_id = auth.uid()
+          d.user_id = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.family_members actor
+            WHERE actor.family_id = family_key_shares.family_id
+              AND actor.user_id = auth.uid()
+              AND actor.role IN ('owner', 'admin')
+          )
         )
     )
   );
