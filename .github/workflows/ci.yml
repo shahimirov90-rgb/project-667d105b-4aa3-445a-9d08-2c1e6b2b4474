@@ -35,13 +35,11 @@ jobs:
       - name: Block critical dependency vulnerabilities
         run: bun audit --audit-level=critical
 
-      # These two upstream advisories have no safe compatible fix at the current published versions.
-      # Zod 3 is still required by the router toolchain; picomatch has no patched release yet.
+      # The remaining picomatch advisory has no published patched version; it is confined to build tooling.
       - name: Block high dependency advisories except documented upstream gaps
         run: >-
           bun audit --audit-level=high
           --ignore GHSA-fc5q-39xc-vjpf
-          --ignore GHSA-mrhx-c7xc-m3w5
 
       # Existing repository formatting debt is handled separately; keep correctness rules active.
       - name: Run ESLint
