@@ -22,6 +22,13 @@
       "when": 1794924640845,
       "tag": "0002_fix_reply_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794925332125,
+      "tag": "0003_e2ee_keys",
+      "breakpoints": true
     }
   ]
 }

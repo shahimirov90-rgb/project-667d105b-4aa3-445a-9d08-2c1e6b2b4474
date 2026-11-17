@@ -32,3 +32,4 @@ use the editor.
 ## Project rules
 - Family membership changes (create family, invites, join requests, roles, removal) go only through SECURITY DEFINER RPCs; tables have read-only RLS for these so clients cannot self-escalate.
 - Media lives in private buckets (`family-media/{family}/{user}/…`, `avatars/{user}/…`) and is shown only via short-lived signed URLs; never make buckets public.
+- Chat text is E2EE: per-device ECDH P-256 keys (private key non-extractable, IndexedDB), a versioned AES-GCM family key wrapped per device in `family_key_shares`; `messages.body` must stay null (DB constraint) — never send plaintext or keys to the server. Clients rotate the family key when the latest version was shared to a non-member device.

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Loader2, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
+import { KeyRound, Loader2, Lock, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FamilyGate, type FamilyCtx } from "@/components/family/FamilyGate";
 import { MediaView } from "@/components/family/MediaView";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { decryptMessage, encryptForFamily, useFamilyKeys, type Decrypted } from "@/lib/e2ee";
 import { errText, formatDay, formatTime, REACTIONS, uploadWithProgress, useInvalidate, useMembers, validateMedia } from "@/lib/family";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/chat")({
   component: () => <FamilyGate title="__family" wide>{(ctx) => <Chat ctx={ctx} />}</FamilyGate>,
 });
 
-type Msg = { id: string; user_id: string; body: string | null; reply_to_id: string | null; media_path: string | null; media_type: string | null; created_at: string };
+type Msg = { id: string; user_id: string; body: string | null; ciphertext: string | null; iv: string | null; key_version: number | null; reply_to_id: string | null; media_path: string | null; media_type: string | null; created_at: string };
 type Pending = { file: File; preview: string; kind: "image" | "video"; ext: string; progress: number | null; abort?: (() => void) | undefined };
 
 function Chat({ ctx }: { ctx: FamilyCtx }) {
@@ -43,7 +44,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   const messages = useQuery({
     queryKey: ["messages", familyId, limit],
     queryFn: async () => {
-      const { data, error } = await supabase.from("messages").select("id, user_id, body, reply_to_id, media_path, media_type, created_at").eq("family_id", familyId).order("created_at", { ascending: false }).limit(limit);
+      const { data, error } = await supabase.from("messages").select("id, user_id, body, ciphertext, iv, key_version, reply_to_id, media_path, media_type, created_at").eq("family_id", familyId).order("created_at", { ascending: false }).limit(limit);
       if (error) throw error;
       return (data as Msg[]).reverse();
     },
@@ -58,16 +59,26 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       return data;
     },
   });
-  const search = useQuery({
-    queryKey: ["search", familyId, q],
-    enabled: searchOpen && q.trim().length >= 2,
+  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id));
+  const e2ee = keys.data;
+  const plain = useQuery({
+    queryKey: ["decrypted", familyId, ids.join(","), e2ee ? [...e2ee.keys.keys()].join(",") : ""],
+    enabled: ids.length > 0,
+    structuralSharing: false,
     queryFn: async () => {
-      const term = q.trim().replace(/[%_\\]/g, (c) => "\\" + c);
-      const { data, error } = await supabase.from("messages").select("id, user_id, body, created_at").eq("family_id", familyId).ilike("body", `%${term}%`).order("created_at", { ascending: false }).limit(50);
-      if (error) throw error;
-      return data;
+      const out = new Map<string, Decrypted>();
+      for (const m of messages.data ?? []) out.set(m.id, await decryptMessage(e2ee, familyId, m));
+      return out;
     },
   });
+  const textOf = (id: string) => plain.data?.get(id);
+  // Text is encrypted on the server, so search runs here, over decrypted loaded messages only.
+  const searchResults = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (t.length < 2) return [];
+    return (messages.data ?? []).filter((m) => textOf(m.id)?.text?.toLowerCase().includes(t)).reverse().slice(0, 50);
+  }, [q, messages.data, plain.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canSendText = e2ee?.status === "ready";
 
   useEffect(() => {
     const ch = supabase
@@ -100,6 +111,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     e?.preventDefault();
     const body = text.trim();
     if (!body && !pending) return;
+    if (body && (!e2ee || !canSendText)) { toast.error("Ключ шифрования ещё не получен — текст пока отправить нельзя"); return; }
     setSending(true);
     let media: { media_path: string; media_type: string; media_mime: string; media_size: number } | null = null;
     try {
@@ -110,7 +122,8 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
         await up.promise;
         media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
       }
-      const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: body || null, reply_to_id: replyTo?.id ?? null, ...media });
+      const cipher = body ? await encryptForFamily(e2ee!, familyId, userId, body) : null;
+      const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
       if (error) {
         if (media) await supabase.storage.from("family-media").remove([media.media_path]);
         throw error;
@@ -157,21 +170,37 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b bg-card/60 px-3 py-2">
-        <p className="flex-1 truncate text-sm text-muted-foreground">🔒 Видят только участники семьи · {members.data?.length ?? "…"} чел.</p>
+        <p className="flex-1 truncate text-sm text-muted-foreground">{canSendText ? "🔐 Текст сообщений зашифрован на устройствах" : "🔒 Доступ только участникам семьи"} · {members.data?.length ?? "…"} чел.</p>
         <Button variant="ghost" size="icon" aria-label="Поиск по сообщениям" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}><Search /></Button>
       </div>
+      {keys.isError ? (
+        <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Не удалось подготовить ключи шифрования: {errText(keys.error)}. Текстовые сообщения временно недоступны.</p>
+      ) : e2ee?.status === "unsupported" ? (
+        <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Этот браузер не поддерживает шифрование. Откройте чат в современном браузере (Chrome, Safari, Firefox).</p>
+      ) : e2ee?.status === "waiting" ? (
+        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Он придёт автоматически, когда кто-то из родных откроет чат. Пока можно отправлять только фото и видео.</p>
+      ) : null}
+      <details className="border-b bg-card/60 px-3 py-2 text-sm">
+        <summary className="cursor-pointer font-semibold">🔐 Как защищена переписка</summary>
+        <div className="mt-2 space-y-1 text-muted-foreground">
+          <p>Текст сообщений шифруется на вашем устройстве до отправки. Сервер хранит только зашифрованные данные и ключ не получает.</p>
+          <p><b>Важно:</b> ключ хранится только в этом браузере. Если очистить данные браузера или потерять все свои устройства, а у родных не будет открытого чата, старую переписку восстановить <b>невозможно</b>.</p>
+          <p>Фото, видео, реакции, имена и время сообщений <b>не шифруются сквозным шифрованием</b> — они защищены доступом только для участников семьи.</p>
+          {e2ee?.fingerprint && <p>Код этого устройства: <code className="font-bold">{e2ee.fingerprint}</code></p>}
+        </div>
+      </details>
       {searchOpen && (
         <div className="border-b bg-card p-3">
+          <p className="mb-2 text-xs text-muted-foreground">Поиск идёт только по загруженным сообщениям на этом устройстве.</p>
           <Input autoFocus placeholder="Найти в переписке…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Текст для поиска" />
           <div className="mt-2 max-h-64 overflow-y-auto" aria-live="polite">
             {q.trim().length < 2 ? <p className="p-2 text-sm text-muted-foreground">Введите минимум 2 символа.</p>
-              : search.isLoading ? <Loader2 className="m-2 animate-spin" aria-label="Поиск" />
-              : search.data?.length === 0 ? <p className="p-2 text-sm text-muted-foreground">Ничего не найдено.</p>
-              : search.data?.map((r) => (
+              : searchResults.length === 0 ? <p className="p-2 text-sm text-muted-foreground">Ничего не найдено.</p>
+              : searchResults.map((r) => (
                 <button key={r.id} onClick={() => jumpTo(r.id)} className="block w-full rounded-lg p-2 text-left hover:bg-muted">
                   <span className="text-sm font-semibold">{people.get(r.user_id)?.display_name ?? "Участник"}</span>
                   <span className="ml-2 text-xs text-muted-foreground">{formatDay(r.created_at)}, {formatTime(r.created_at)}</span>
-                  <span className="block truncate">{r.body}</span>
+                  <span className="block truncate">{textOf(r.id)?.text}</span>
                 </button>
               ))}
           </div>
@@ -208,11 +237,17 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
                         {m.reply_to_id && (
                           <div className={cn("mb-2 rounded-lg border-l-4 px-2 py-1 text-sm", own ? "border-primary-foreground/60 bg-primary-foreground/15" : "border-primary bg-muted")}>
                             <b>{quoted ? people.get(quoted.user_id)?.display_name ?? "Участник" : "Сообщение"}</b>
-                            <span className="block truncate opacity-80">{quoted ? quoted.body ?? (quoted.media_type === "video" ? "🎬 Видео" : "📷 Фото") : "Удалено или загружено раньше"}</span>
+                            <span className="block truncate opacity-80">{quoted ? textOf(quoted.id)?.text ?? (quoted.media_type === "video" ? "🎬 Видео" : "📷 Фото") : "Удалено или загружено раньше"}</span>
                           </div>
                         )}
                         {m.media_path && <MediaView path={m.media_path} type={m.media_type} className="mb-1 min-w-48" />}
-                        {m.body && <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{m.body}</p>}
+                        {(() => {
+                          const d = textOf(m.id);
+                          if (!d || d.state === "none") return m.ciphertext ? <p className="text-sm italic opacity-70">Расшифровка…</p> : null;
+                          if (d.state === "nokey") return <p className="flex items-center gap-1 text-sm italic opacity-80"><Lock className="size-3.5" aria-hidden />Зашифровано — у этого устройства нет ключа</p>;
+                          if (d.state === "fail") return <p className="text-sm italic opacity-80">Не удалось расшифровать сообщение</p>;
+                          return <>{d.state === "plain" && <span className="block text-xs opacity-70">старое, без шифрования</span>}<p className="whitespace-pre-wrap break-words text-base leading-relaxed">{d.text}</p></>;
+                        })()}
                         <time dateTime={m.created_at} className="mt-0.5 block text-right text-xs opacity-70">{formatTime(m.created_at)}</time>
                       </div>
                       {counts.length > 0 && (
@@ -247,7 +282,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
           {replyTo && (
             <div className="mb-2 flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
               <Reply className="size-4 text-primary" aria-hidden />
-              <span className="flex-1 truncate">Ответ <b>{people.get(replyTo.user_id)?.display_name}</b>: {replyTo.body ?? "медиа"}</span>
+              <span className="flex-1 truncate">Ответ <b>{people.get(replyTo.user_id)?.display_name}</b>: {textOf(replyTo.id)?.text ?? "медиа"}</span>
               <Button type="button" variant="ghost" size="sm" aria-label="Отменить ответ" onClick={() => setReplyTo(null)}><X /></Button>
             </div>
           )}
@@ -266,7 +301,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} tabIndex={-1} aria-hidden />
             <Button type="button" variant="outline" size="icon" aria-label="Прикрепить фото или видео" onClick={() => fileRef.current?.click()} disabled={sending}><Paperclip /></Button>
             <textarea
-              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder="Напишите сообщение…" aria-label="Текст сообщения"
+              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder={canSendText ? "Напишите сообщение…" : "Ждём ключ шифрования…"} disabled={!canSendText} aria-label="Текст сообщения"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               className="max-h-40 min-h-11 flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />

@@ -21,7 +21,7 @@ const FEATURES = [
   { icon: MessageCircleHeart, title: "Общий семейный чат", text: "Ответы, реакции и поиск по истории." },
   { icon: Images, title: "Фото и видео", text: "Галерея всех семейных моментов в одном месте." },
   { icon: UserPlus, title: "Только по приглашению", text: "Владелец одобряет каждого нового родственника." },
-  { icon: Lock, title: "Приватно", text: "Файлы закрыты: доступ только у участников семьи." },
+  { icon: Lock, title: "Приватно", text: "Текст сообщений зашифрован на устройствах, файлы доступны только семье." },
 ];
 
 function Index() {
@@ -53,6 +53,7 @@ function Index() {
           ))}
         </ul>
       </main>
+      <footer className="border-t px-5 py-6 text-center text-sm text-muted-foreground">Создатель Шах Имиров</footer>
     </div>
   );
 }

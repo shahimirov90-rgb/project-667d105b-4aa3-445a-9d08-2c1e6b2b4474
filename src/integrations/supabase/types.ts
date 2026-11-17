@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      device_keys: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          public_key: Json
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          public_key: Json
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          public_key?: Json
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_keys_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       families: {
         Row: {
           created_at: string
@@ -66,6 +101,83 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "family_invites_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      family_key_shares: {
+        Row: {
+          created_at: string
+          created_by: string
+          device_id: string
+          eph_public_key: Json
+          family_id: string
+          iv: string
+          version: number
+          wrapped_key: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          device_id: string
+          eph_public_key: Json
+          family_id: string
+          iv: string
+          version: number
+          wrapped_key: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          device_id?: string
+          eph_public_key?: Json
+          family_id?: string
+          iv?: string
+          version?: number
+          wrapped_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_key_shares_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "device_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "family_key_shares_family_id_version_fkey"
+            columns: ["family_id", "version"]
+            isOneToOne: false
+            referencedRelation: "family_keys"
+            referencedColumns: ["family_id", "version"]
+          },
+        ]
+      }
+      family_keys: {
+        Row: {
+          created_at: string
+          created_by: string
+          family_id: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          family_id: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          family_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_keys_family_id_fkey"
             columns: ["family_id"]
             isOneToOne: false
             referencedRelation: "families"
@@ -210,9 +322,12 @@ export type Database = {
       messages: {
         Row: {
           body: string | null
+          ciphertext: string | null
           created_at: string
           family_id: string
           id: string
+          iv: string | null
+          key_version: number | null
           media_mime: string | null
           media_path: string | null
           media_size: number | null
@@ -222,9 +337,12 @@ export type Database = {
         }
         Insert: {
           body?: string | null
+          ciphertext?: string | null
           created_at?: string
           family_id: string
           id?: string
+          iv?: string | null
+          key_version?: number | null
           media_mime?: string | null
           media_path?: string | null
           media_size?: number | null
@@ -234,9 +352,12 @@ export type Database = {
         }
         Update: {
           body?: string | null
+          ciphertext?: string | null
           created_at?: string
           family_id?: string
           id?: string
+          iv?: string | null
+          key_version?: number | null
           media_mime?: string | null
           media_path?: string | null
           media_size?: number | null
