@@ -136,7 +136,10 @@ export function useFamilyKeys(familyId: string, userId: string, memberIds: strin
     queryKey: ["e2ee", familyId, userId, (memberIds ?? []).slice().sort().join(",")],
     enabled: !!memberIds?.length,
     structuralSharing: false,
-    refetchInterval: 20000,
+    // While waiting for another device to publish/share a key, retry more frequently.
+    // Once ready, keep a slower refresh to discover newly approved devices and rotations.
+    refetchInterval: (query) => query.state.data?.status === "waiting" ? 5000 : 20000,
+    refetchOnWindowFocus: true,
     queryFn: () => syncFamilyKeys(familyId, userId, memberIds!),
   });
 }
