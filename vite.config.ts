@@ -27,17 +27,13 @@ export default defineConfig({
         manifest: false,
         devOptions: { enabled: false },
         workbox: {
+          // TanStack Start writes client assets to .output/public rather than dist.
+          globDirectory: ".output/public",
           navigateFallback: null,
-          globPatterns: ["**/*.{js,css,png,svg,ico,woff2,webmanifest}"],
+          globPatterns: ["assets/**/*.{js,css,png,svg,ico,woff2,webmanifest}"],
+          globIgnores: ["**/*.html"],
           cleanupOutdatedCaches: true,
-          runtimeCaching: [
-            {
-              urlPattern: ({ request, url }) => request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
-              handler: "NetworkFirst",
-              options: { cacheName: "pages", networkTimeoutSeconds: 4, expiration: { maxEntries: 20 } },
-            },
-          ],
-        },
+        },,
       }),
     ],
   },
