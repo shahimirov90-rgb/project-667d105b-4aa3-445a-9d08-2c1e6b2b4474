@@ -16,6 +16,11 @@ describe("E2EE family key access", () => {
     expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "invalid")).toBe(false);
   });
 
+  it("preserves microsecond ordering when timestamps fall in the same millisecond", () => {
+    expect(canReceiveKeyVersion("2026-01-01T10:00:00.123456Z", "2026-01-01T10:00:00.123455Z")).toBe(false);
+    expect(canReceiveKeyVersion("2026-01-01T10:00:00.123455Z", "2026-01-01T10:00:00.123456Z")).toBe(true);
+  });
+
 
   it("allows owners and admins to distribute keys to another member device", () => {
     expect(canDistributeKeyTo("admin-user", "member-user", true)).toBe(true);
