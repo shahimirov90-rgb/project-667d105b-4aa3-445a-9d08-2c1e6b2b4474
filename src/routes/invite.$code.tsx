@@ -51,12 +51,17 @@ function InvitePage() {
 
   async function join() {
     setBusy(true);
-    const { error } = await supabase.rpc("request_join", { _code: code });
-    setBusy(false);
-    sessionStorage.removeItem("pendingInvite");
-    if (error) { toast.error(errText(error)); return; }
-    toast.success("Заявка отправлена владельцу семьи");
-    navigate({ to: "/chat" });
+    try {
+      const { error } = await supabase.rpc("request_join", { _code: code });
+      if (error) throw error;
+      sessionStorage.removeItem("pendingInvite");
+      toast.success("Заявка отправлена владельцу семьи");
+      navigate({ to: "/chat" });
+    } catch (error) {
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   const p = preview.data;
