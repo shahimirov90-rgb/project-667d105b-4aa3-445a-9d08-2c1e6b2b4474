@@ -30,11 +30,16 @@ export function Onboarding({ userId }: { userId: string }) {
   async function create(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const { error } = await supabase.rpc("create_family", { _name: name });
-    setBusy(false);
-    if (error) { toast.error(errText(error)); return; }
-    toast.success("Семья создана! Пригласите родных.");
-    invalidate("membership");
+    try {
+      const { error } = await supabase.rpc("create_family", { _name: name });
+      if (error) throw error;
+      toast.success("Семья создана! Пригласите родных.");
+      invalidate("membership");
+    } catch (error) {
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function useCode(e: FormEvent) {
@@ -44,8 +49,13 @@ export function Onboarding({ userId }: { userId: string }) {
   }
 
   async function cancel(id: string) {
-    await supabase.rpc("cancel_join_request", { _request: id });
-    invalidate("myRequest");
+    try {
+      const { error } = await supabase.rpc("cancel_join_request", { _request: id });
+      if (error) throw error;
+      invalidate("myRequest");
+    } catch (error) {
+      toast.error(errText(error));
+    }
   }
 
   if (pending.isLoading) return <div className="flex justify-center py-20"><Loader2 className="size-8 animate-spin text-primary" aria-label="Загрузка" /></div>;
