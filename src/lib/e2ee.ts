@@ -96,18 +96,20 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   }
   const latest = Math.max(...versions.data.map((v) => v.version));
   const fp = await fingerprint(me.publicJwk);
-  const latestKey = keys.get(latest);
-  if (!latestKey) return { status: "waiting", keys, current: null, fingerprint: fp };
 
-  // Rotation: the latest key was given to a device that no longer belongs to a current member
-  // (member removed / left, or device revoked) → create a new key for current members only.
+  // Detect revoked/former-member recipients before requiring this device to hold
+  // the latest key; otherwise the remaining family devices can wait forever.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  if (latestHolders.some((id) => !activeIds.has(id))) {
+  const needsRotation = latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id));
+  if (needsRotation) {
     if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
     if (attempt >= 3) throw new Error("Не удалось обновить ключ шифрования семьи");
     await createVersion(familyId, userId, latest + 1, devices);
     return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
   }
+
+  const latestKey = keys.get(latest);
+  if (!latestKey) return { status: "waiting", keys, current: null, fingerprint: fp };
 
   // Distribution: give every key version this device holds to member devices that don't have it yet
   // (new relatives after approval, relatives' new phones/browsers).
