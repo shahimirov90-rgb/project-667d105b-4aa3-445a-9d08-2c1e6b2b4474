@@ -35,9 +35,11 @@ jobs:
       - name: Block critical dependency vulnerabilities
         run: bun audit --audit-level=critical
 
-      - name: Report high dependency advisories
-        run: bun audit --audit-level=high --ignore GHSA-fc5q-39xc-vjpf
-        continue-on-error: true
+      - name: Block high dependency advisories except documented upstream gaps
+        run: >-
+          bun audit --audit-level=high
+          --ignore GHSA-fc5q-39xc-vjpf
+          --ignore GHSA-mrhx-c7xc-m3w5
 
       # Existing repository formatting debt is handled separately; keep correctness rules active.
       - name: Run ESLint
