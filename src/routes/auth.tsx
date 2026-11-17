@@ -24,7 +24,11 @@ export const Route = createFileRoute("/auth")({
 
 function nextPath() {
   let code: string | null = null;
-  try { if (typeof window !== "undefined") code = sessionStorage.getItem("pendingInvite"); } catch { /* Session storage may be disabled. */ }
+  if (typeof window !== "undefined") {
+    try { code = sessionStorage.getItem("pendingInvite"); } catch { /* Session storage may be disabled. */ }
+    // Keep the invite through password and OAuth redirects when storage is blocked.
+    if (!code) code = new URLSearchParams(window.location.search).get("invite");
+  }
   return code ? `/invite/${encodeURIComponent(code)}` : "/chat";
 }
 
@@ -78,7 +82,7 @@ function AuthPage() {
   async function google() {
     setBusy(true);
     try {
-      const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" });
+      const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" + window.location.search });
       if (r.error) toast.error("Не удалось войти через Google");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось войти через Google");
