@@ -33,7 +33,7 @@ export default defineConfig({
           globPatterns: ["assets/**/*.{js,css,png,svg,ico,woff2,webmanifest}"],
           globIgnores: ["**/*.html"],
           cleanupOutdatedCaches: true,
-        },,
+        },
       }),
     ],
   },
