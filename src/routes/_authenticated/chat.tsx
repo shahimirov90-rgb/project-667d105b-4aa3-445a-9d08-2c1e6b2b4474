@@ -162,12 +162,16 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   }
 
   async function toggleReaction(m: Msg, emoji: string) {
-    const mine = reactions.data?.some((r) => r.message_id === m.id && r.user_id === userId && r.emoji === emoji);
-    const { error } = mine
-      ? await supabase.from("message_reactions").delete().match({ message_id: m.id, user_id: userId, emoji })
-      : await supabase.from("message_reactions").insert({ message_id: m.id, user_id: userId, emoji, family_id: familyId });
-    if (error) toast.error(errText(error));
-    invalidate("reactions");
+    try {
+      const mine = reactions.data?.some((r) => r.message_id === m.id && r.user_id === userId && r.emoji === emoji);
+      const { error } = mine
+        ? await supabase.from("message_reactions").delete().match({ message_id: m.id, user_id: userId, emoji })
+        : await supabase.from("message_reactions").insert({ message_id: m.id, user_id: userId, emoji, family_id: familyId });
+      if (error) throw error;
+      invalidate("reactions");
+    } catch (error) {
+      toast.error(errText(error));
+    }
   }
 
   async function remove(m: Msg) {
@@ -178,21 +182,25 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       toast.error("Пока нельзя удалить медиафайл другого участника: требуется безопасная серверная очистка.");
       return;
     }
-    const { error } = await supabase.from("messages").delete().eq("id", m.id);
-    if (error) { toast.error(errText(error)); return; }
-    if (m.media_path) {
-      try {
-        const { error: storageError } = await supabase.storage.from("family-media").remove([m.media_path]);
-        if (storageError) {
+    try {
+      const { error } = await supabase.from("messages").delete().eq("id", m.id);
+      if (error) throw error;
+      if (m.media_path) {
+        try {
+          const { error: storageError } = await supabase.storage.from("family-media").remove([m.media_path]);
+          if (storageError) {
+            console.error("[Chat] Message deleted but its media cleanup failed", storageError);
+            toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
+          }
+        } catch (storageError) {
           console.error("[Chat] Message deleted but its media cleanup failed", storageError);
           toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
         }
-      } catch (storageError) {
-        console.error("[Chat] Message deleted but its media cleanup failed", storageError);
-        toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
       }
+      invalidate("messages");
+    } catch (error) {
+      toast.error(errText(error));
     }
-    invalidate("messages");
   }
 
   function jumpTo(id: string) {
