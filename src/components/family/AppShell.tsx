@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Images, LogOut, MessageCircleHeart, UserRound, Users } from "lucide-react";
+import { Images, LogOut, MessageCircleHeart, Settings, UserRound, Users } from "lucide-react";
+import type { Role } from "@/lib/family";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ const NAV = [
   { to: "/profile", label: "Профиль", icon: UserRound },
 ] as const;
 
-export function AppShell({ title, children, wide }: { title: string; children: ReactNode; wide?: boolean | undefined }) {
+export function AppShell({ title, children, wide, role }: { title: string; children: ReactNode; wide?: boolean | undefined; role?: Role }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   async function signOut() {
@@ -42,7 +43,14 @@ export function AppShell({ title, children, wide }: { title: string; children: R
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <h1 className="truncate text-xl font-semibold md:text-2xl">{title}</h1>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={signOut} aria-label="Выйти"><LogOut /></Button>
+          <div className="flex items-center gap-1">
+            {(role === "owner" || role === "admin") && (
+              <Button asChild variant="ghost" size="icon" aria-label="Настройки администратора" title="Настройки администратора">
+                <Link to="/family" hash="admin-settings"><Settings /></Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="md:hidden" onClick={signOut} aria-label="Выйти"><LogOut /></Button>
+          </div>
         </header>
         <main className={wide ? "flex min-h-0 flex-1 flex-col" : "min-h-0 flex-1 overflow-y-auto"}>{children}</main>
         <nav className="grid grid-cols-4 border-t bg-card md:hidden" aria-label="Основное меню">
