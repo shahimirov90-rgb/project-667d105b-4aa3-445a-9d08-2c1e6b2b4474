@@ -29,9 +29,11 @@ export function Onboarding({ userId }: { userId: string }) {
 
   async function create(e: FormEvent) {
     e.preventDefault();
+    const familyName = name.trim();
+    if (!familyName) { toast.error("Введите название семьи"); return; }
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("create_family", { _name: name });
+      const { error } = await supabase.rpc("create_family", { _name: familyName });
       if (error) throw error;
       toast.success("Семья создана! Пригласите родных.");
       invalidate("membership");
@@ -44,8 +46,10 @@ export function Onboarding({ userId }: { userId: string }) {
 
   function useCode(e: FormEvent) {
     e.preventDefault();
-    const c = code.trim().split("/").pop()?.toUpperCase();
-    if (c) navigate({ to: "/invite/$code", params: { code: c } });
+    const raw = code.trim();
+    const candidate = raw.split("/").filter(Boolean).pop()?.split(/[?#]/, 1)[0]?.trim().toUpperCase();
+    if (!candidate) { toast.error("Введите код или ссылку приглашения"); return; }
+    navigate({ to: "/invite/$code", params: { code: candidate } });
   }
 
   async function cancel(id: string) {
