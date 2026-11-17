@@ -59,3 +59,7 @@ The gallery now requests signed URLs for its visible media set in one Storage ba
 ### Dependency audit exception under review
 
 The latest Bun audit reported a high-severity Zod advisory affecting versions below 4.6.6. The project currently resolves Zod 3.x through build tooling; upstream has no patched 3.x release. Do not force a global Zod 4 override without checking TanStack tooling compatibility. Track the migration separately and keep the advisory visible until the dependency graph is safely migrated or the affected path is proven unreachable.
+
+### Dependency advisories without a published fix
+
+The dependency graph has been refreshed to patched releases where upstream provides compatible versions, including Vite 8.1.7, shell-quote 1.11.0, js-yaml 4.3.2, launch-editor 2.14.2, nanoid 3.3.18, and source-map-js 1.2.2. The remaining high-severity audit findings include Zod 3.x (no patched 3.x release), Picomatch up to 4.0.7 (the advisory currently lists no fixed release), and brace-expansion 2.1.8 (the registry does not currently provide the newer patched version required by the advisory). Do not force non-existent versions or major-version overrides. Keep these visible in the audit report and re-check them on the next dependency update.
