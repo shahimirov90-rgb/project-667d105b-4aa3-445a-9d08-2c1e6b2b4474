@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { decryptText, e2eeSupported, encryptText, exportPublicJwk, fingerprint, generateDeviceKeyPair, generateFamilyKey, unwrapFamilyKey, wrapFamilyKey } from "./e2ee-crypto";
+import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation, requiresMembershipKeyRotation } from "./e2ee-access";
 
 /* ---------- device key storage (IndexedDB, private key non-extractable) ---------- */
 type StoredDevice = { deviceId: string; privateKey: CryptoKey; publicJwk: JsonWebKey };
@@ -16,17 +17,33 @@ function idb(): Promise<IDBDatabase> {
 }
 async function idbGet(userId: string): Promise<StoredDevice | undefined> {
   const db = await idb();
-  return new Promise((res, rej) => { const r = db.transaction(STORE).objectStore(STORE).get(userId); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE);
+    const r = tx.objectStore(STORE).get(userId);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => { db.close(); rej(tx.error); };
+    tx.onabort = () => { db.close(); rej(tx.error); };
+  });
 }
 async function idbPut(userId: string, v: StoredDevice) {
   const db = await idb();
-  return new Promise<void>((res, rej) => { const t = db.transaction(STORE, "readwrite"); t.objectStore(STORE).put(v, userId); t.oncomplete = () => res(); t.onerror = () => rej(t.error); });
+  return new Promise<void>((res, rej) => {
+    const t = db.transaction(STORE, "readwrite");
+    t.objectStore(STORE).put(v, userId);
+    t.oncomplete = () => { db.close(); res(); };
+    t.onerror = () => { db.close(); rej(t.error); };
+    t.onabort = () => { db.close(); rej(t.error); };
+  });
 }
 
 async function ensureDevice(userId: string): Promise<StoredDevice> {
   const saved = await idbGet(userId);
   if (saved) {
-    const { data } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    const { data, error } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    // A transient database/network error must not silently register a second device.
+    if (error) throw error;
     if (data && !data.revoked_at) return saved;
   }
   const pair = await generateDeviceKeyPair();
@@ -67,24 +84,28 @@ async function createVersion(familyId: string, userId: string, version: number, 
   return true;
 }
 
-export async function syncFamilyKeys(familyId: string, userId: string, memberIds: string[], attempt = 0): Promise<E2EEState> {
+export async function syncFamilyKeys(familyId: string, userId: string, memberIds: string[], canManageKeys: boolean, attempt = 0): Promise<E2EEState> {
   if (!e2eeSupported()) return { status: "unsupported", keys: new Map(), current: null, fingerprint: null };
   const me = await ensureDevice(userId);
-  const [versions, shares, devs] = await Promise.all([
-    supabase.from("family_keys").select("version").eq("family_id", familyId),
+  const [versions, shares, devs, memberships] = await Promise.all([
+    supabase.from("family_keys").select("version, created_at").eq("family_id", familyId),
     supabase.from("family_key_shares").select("version, device_id, eph_public_key, iv, wrapped_key").eq("family_id", familyId),
     supabase.from("device_keys").select("id, user_id, public_key").in("user_id", memberIds).is("revoked_at", null),
+    supabase.from("family_members").select("user_id, joined_at").eq("family_id", familyId),
   ]);
   if (versions.error) throw versions.error;
   if (shares.error) throw shares.error;
   if (devs.error) throw devs.error;
+  if (memberships.error) throw memberships.error;
+  const joinedAtByUser = new Map(memberships.data.map((m) => [m.user_id, m.joined_at]));
   const devices = (devs.data as unknown as Device[]).filter((d) => memberIds.includes(d.user_id));
   const activeIds = new Set(devices.map((d) => d.id));
 
   if (!versions.data.length) {
+    if (!canManageKeys) return { status: "waiting", keys: new Map(), current: null, fingerprint: await fingerprint(me.publicJwk) };
     if (attempt >= 3) throw new Error("Не удалось создать ключ шифрования семьи");
     await createVersion(familyId, userId, 1, devices);
-    return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
   }
 
   const keys = new Map<number, CryptoKey>();
@@ -95,33 +116,59 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   }
   const latest = Math.max(...versions.data.map((v) => v.version));
   const fp = await fingerprint(me.publicJwk);
-  const latestKey = keys.get(latest);
-  if (!latestKey) return { status: "waiting", keys, current: null, fingerprint: fp };
 
-  // Rotation: the latest key was given to a device that no longer belongs to a current member
-  // (member removed / left, or device revoked) → create a new key for current members only.
+  // Detect former-member/revoked-device shares and orphaned versions before requiring
+  // this device to hold the latest key. Only an owner/admin may rotate the family key.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  if (latestHolders.some((id) => !activeIds.has(id)) && attempt < 3) {
+  const latestVersion = versions.data.find((item) => item.version === latest);
+  // Rotate for new/removed devices and as soon as membership changes, even before
+  // a newly approved member has registered their first device.
+  const needsRotation = requiresFamilyKeyRotation([...activeIds], latestHolders)
+    || !latestVersion
+    || requiresMembershipKeyRotation(memberships.data.map((m) => m.joined_at), latestVersion.created_at);
+  if (needsRotation) {
+    if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
+    if (attempt >= 3) throw new Error("Не удалось обновить ключ шифрования семьи");
     await createVersion(familyId, userId, latest + 1, devices);
-    return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
+  }
+
+  const latestKey = keys.get(latest);
+  if (!latestKey) {
+    if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
+    // An owner/admin on a replacement device may not possess the latest key.
+    // Since only an authorized role can create versions, rotate a fresh key and
+    // distribute it to active devices rather than leaving the family stuck.
+    if (attempt >= 3) throw new Error("Не удалось восстановить ключ шифрования семьи");
+    await createVersion(familyId, userId, latest + 1, devices);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
   }
 
   // Distribution: give every key version this device holds to member devices that don't have it yet
   // (new relatives after approval, relatives' new phones/browsers).
   for (const [v, k] of keys) {
+    const version = versions.data.find((item) => item.version === v);
+    if (!version) continue;
     const have = new Set(shares.data.filter((s) => s.version === v).map((s) => s.device_id));
-    await shareTo(familyId, userId, v, k, devices.filter((d) => !have.has(d.id)));
+    // Existing members can restore their history on a replacement device.
+    // A newly joined member receives only versions created after joining.
+    const eligible = devices.filter((d) => {
+      if (have.has(d.id) || !canDistributeKeyTo(userId, d.user_id, canManageKeys)) return false;
+      const joinedAt = joinedAtByUser.get(d.user_id);
+      return !!joinedAt && canReceiveKeyVersion(joinedAt, version.created_at);
+    });
+    await shareTo(familyId, userId, v, k, eligible);
   }
   return { status: "ready", keys, current: latest, fingerprint: fp };
 }
 
-export function useFamilyKeys(familyId: string, userId: string, memberIds: string[] | undefined) {
+export function useFamilyKeys(familyId: string, userId: string, memberIds: string[] | undefined, canManageKeys: boolean) {
   return useQuery({
-    queryKey: ["e2ee", familyId, userId, (memberIds ?? []).slice().sort().join(",")],
+    queryKey: ["e2ee", familyId, userId, canManageKeys, (memberIds ?? []).slice().sort().join(",")],
     enabled: !!memberIds?.length,
     structuralSharing: false,
     refetchInterval: 20000,
-    queryFn: () => syncFamilyKeys(familyId, userId, memberIds!),
+    queryFn: () => syncFamilyKeys(familyId, userId, memberIds!, canManageKeys),
   });
 }
 
