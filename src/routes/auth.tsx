@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { inviteRedirectPath } from "@/lib/invite-routing";
 import { Input } from "@/components/ui/input";
@@ -83,8 +82,11 @@ function AuthPage() {
   async function google() {
     setBusy(true);
     try {
-      const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" + window.location.search });
-      if (r.error) toast.error("Не удалось войти через Google");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/auth" + window.location.search },
+      });
+      if (error) throw error;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось войти через Google");
     } finally {
