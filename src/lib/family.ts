@@ -27,6 +27,9 @@ const EXT: Record<string, string> = {
 export function validateMedia(file: { type: string; size: number }):
   | { ok: true; kind: "image" | "video"; ext: string }
   | { ok: false; error: string } {
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    return { ok: false, error: "Файл пустой или имеет некорректный размер" };
+  }
   if (IMAGE_TYPES.includes(file.type)) {
     if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: "Фото больше 15 МБ" };
     return { ok: true, kind: "image", ext: EXT[file.type] ?? "bin" };
