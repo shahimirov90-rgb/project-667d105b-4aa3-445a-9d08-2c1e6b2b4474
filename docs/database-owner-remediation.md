@@ -74,7 +74,7 @@ Do not broaden Storage DELETE policy to all family members. Add tests for author
 ## Verification and rollout
 
 1. Apply the changes in a disposable/test database first, not production.
-2. Run database tests and inspect RLS/policies/grants after the change.
+2. Run database tests and execute the read-only queries in `docs/database-security-verification.sql` to inspect RLS, policies, grants, constraints, SECURITY DEFINER privileges, and storage buckets after the change.
 3. Regenerate Supabase TypeScript types through the approved workflow.
 4. Run GitHub Actions: ESLint, TypeScript, Vitest, and production build.
 5. Test real flows with owner, admin, regular member, newly approved member, removed member, and a second device.
