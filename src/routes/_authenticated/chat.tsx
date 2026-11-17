@@ -117,22 +117,25 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     try {
       if (pending) {
         const path = `${familyId}/${userId}/${crypto.randomUUID()}.${pending.ext}`;
+        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
         const up = uploadWithProgress("family-media", path, pending.file, (p) => setPending((s) => (s ? { ...s, progress: p } : s)));
         setPending((s) => (s ? { ...s, progress: 0, abort: up.abort } : s));
         await up.promise;
-        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
       }
       const cipher = body ? await encryptForFamily(e2ee!, familyId, userId, body) : null;
       const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
-      if (error) {
-        if (media) await supabase.storage.from("family-media").remove([media.media_path]);
-        throw error;
-      }
+      if (error) throw error;
       setText(""); setReplyTo(null);
       if (pending) URL.revokeObjectURL(pending.preview);
       setPending(null);
       invalidate("messages");
     } catch (err) {
+      // Remove an uploaded file if encryption or message insertion fails.
+      // The path is set before upload so even a partially completed upload is cleaned up.
+      if (media) {
+        const { error: cleanupError } = await supabase.storage.from("family-media").remove([media.media_path]);
+        if (cleanupError) console.error("Failed to clean up an unsent chat attachment", cleanupError);
+      }
       toast.error(errText(err));
       setPending((s) => (s ? { ...s, progress: null, abort: undefined } : s));
     } finally {
