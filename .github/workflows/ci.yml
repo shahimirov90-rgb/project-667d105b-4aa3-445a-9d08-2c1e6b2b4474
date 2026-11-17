@@ -32,6 +32,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Block critical dependency vulnerabilities
+        run: bun audit --audit-level=critical
+
+      # The remaining picomatch advisory has no published patched version; it is confined to build tooling.
+      - name: Block high dependency advisories except documented upstream gaps
+        run: >-
+          bun audit --audit-level=high
+          --ignore GHSA-fc5q-39xc-vjpf
+
       # Existing repository formatting debt is handled separately; keep correctness rules active.
       - name: Run ESLint
         run: >-

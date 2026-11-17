@@ -8,7 +8,7 @@ import { CenterState } from "@/components/family/AppShell";
 import { MediaView } from "@/components/family/MediaView";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { formatDay, useMembers, useSignedUrl } from "@/lib/family";
+import { formatDay, useMembers, useSignedUrls } from "@/lib/family";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/gallery")({
@@ -18,9 +18,9 @@ export const Route = createFileRoute("/_authenticated/gallery")({
 
 type Item = { id: string; user_id: string; media_path: string; media_type: string | null; created_at: string; body: string | null };
 
-function Thumb({ item }: { item: Item }) {
-  const { data: url } = useSignedUrl("family-media", item.media_path);
-  if (!url) return <div className="flex size-full items-center justify-center bg-muted"><Loader2 className="animate-spin text-muted-foreground" aria-hidden /></div>;
+function Thumb({ item, url, loading, error }: { item: Item; url: string | undefined; loading: boolean; error: boolean }) {
+  if (loading) return <div className="flex size-full items-center justify-center bg-muted"><Loader2 className="animate-spin text-muted-foreground" aria-hidden /></div>;
+  if (error || !url) return <div className="flex size-full items-center justify-center bg-muted p-2 text-center text-xs text-muted-foreground">Файл недоступен</div>;
   return item.media_type === "video" ? (
     <><video src={url + "#t=0.1"} preload="metadata" muted playsInline className="size-full object-cover" /><Play className="absolute inset-0 m-auto size-10 rounded-full bg-foreground/50 p-2 text-background" aria-hidden /></>
   ) : <img src={url} alt="" loading="lazy" className="size-full object-cover" />;
@@ -40,6 +40,7 @@ function Gallery({ ctx }: { ctx: FamilyCtx }) {
       return data as Item[];
     },
   });
+  const signed = useSignedUrls("family-media", q.data?.map((item) => item.media_path));
   const name = (id: string) => members.data?.find((m) => m.user_id === id)?.profiles?.display_name ?? "Участник";
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
@@ -56,7 +57,7 @@ function Gallery({ ctx }: { ctx: FamilyCtx }) {
             {q.data.map((it) => (
               <li key={it.id}>
                 <button onClick={() => setOpen(it)} className={cn("relative block aspect-square w-full overflow-hidden rounded-xl bg-muted focus-visible:ring-4 focus-visible:ring-ring")} aria-label={`${it.media_type === "video" ? "Видео" : "Фото"} от ${name(it.user_id)}, ${formatDay(it.created_at)}`}>
-                  <Thumb item={it} />
+                  <Thumb item={it} url={signed.data?.get(it.media_path)} loading={signed.isLoading} error={signed.isError} />
                 </button>
               </li>
             ))}

@@ -24,6 +24,24 @@ describe("family E2EE crypto", () => {
     expect(await decryptText(got, c, { familyId: fam, userId: user, version: 1 })).toBe("тайна");
     await expect(unwrapFamilyKey(share, eve.privateKey, ctx)).rejects.toThrow();
   });
+
+  it("binds wrapped keys to the family, version, and recipient device", async () => {
+    const k = await generateFamilyKey();
+    const alice = await generateDeviceKeyPair();
+    const ctx = { familyId: fam, version: 1, deviceId: "d1" };
+    const share = await wrapFamilyKey(k, await exportPublicJwk(alice.publicKey), ctx);
+    await expect(unwrapFamilyKey(share, alice.privateKey, { ...ctx, familyId: "other-family" })).rejects.toThrow();
+    await expect(unwrapFamilyKey(share, alice.privateKey, { ...ctx, version: 2 })).rejects.toThrow();
+    await expect(unwrapFamilyKey(share, alice.privateKey, { ...ctx, deviceId: "other-device" })).rejects.toThrow();
+  });
+
+  it("binds message ciphertext to its family and key version", async () => {
+    const k = await generateFamilyKey();
+    const ctx = { familyId: fam, userId: user, version: 1 };
+    const c = await encryptText(k, "только для этой семьи", ctx);
+    await expect(decryptText(k, c, { ...ctx, familyId: "other-family" })).rejects.toThrow();
+    await expect(decryptText(k, c, { ...ctx, version: 2 })).rejects.toThrow();
+  });
   it("a rotated key cannot read messages of the new version with the old key", async () => {
     const v1 = await generateFamilyKey(), v2 = await generateFamilyKey();
     const c = await encryptText(v2, "после исключения", { familyId: fam, userId: user, version: 2 });

@@ -14,13 +14,18 @@ export function swAllowed(href: string, inIframe: boolean, prod: boolean): boole
 
 export async function setupServiceWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  let inIframe = true;
-  try { inIframe = window.self !== window.top; } catch { /* cross-origin parent */ }
-  if (!swAllowed(window.location.href, inIframe, import.meta.env.PROD)) {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(regs.filter((r) => r.active?.scriptURL.endsWith("/sw.js")).map((r) => r.unregister()));
-    return;
+  try {
+    let inIframe = true;
+    try { inIframe = window.self !== window.top; } catch { /* cross-origin parent */ }
+    if (!swAllowed(window.location.href, inIframe, import.meta.env.PROD)) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.filter((r) => r.active?.scriptURL.endsWith("/sw.js")).map((r) => r.unregister()));
+      return;
+    }
+    const { registerSW } = await import("virtual:pwa-register");
+    registerSW({ immediate: true });
+  } catch (error) {
+    // Offline/PWA setup must not prevent the application itself from rendering.
+    console.warn("[PWA] Service worker setup failed", error);
   }
-  const { registerSW } = await import("virtual:pwa-register");
-  registerSW({ immediate: true });
 }

@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/family/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { errText, MAX_AVATAR_BYTES, useInvalidate, useProfile } from "@/lib/family";
+import { errText, MAX_AVATAR_BYTES, useInvalidate, useMyMembership, useProfile } from "@/lib/family";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Профиль — Семейный круг" }, { name: "description", content: "Ваше имя и фото в семейном чате." }, { property: "og:title", content: "Профиль" }, { property: "og:description", content: "Ваше имя и фото в семейном чате." }] }),
@@ -19,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
 function Profile() {
   const { user } = AuthRoute.useRouteContext();
   const profile = useProfile(user.id);
+  const membership = useMyMembership(user.id);
   const invalidate = useInvalidate();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,37 +28,78 @@ function Profile() {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) { toast.error("Введите имя"); return; }
+    const displayName = name.trim().slice(0, 60);
+    if (!displayName) { toast.error("Введите имя"); return; }
     setBusy(true);
-    const { error } = await supabase.from("profiles").update({ display_name: name.trim().slice(0, 60) }).eq("id", user.id);
-    setBusy(false);
-    if (error) { toast.error(errText(error)); return; }
-    toast.success("Сохранено");
-    invalidate("profile", "members");
+    try {
+      const { error } = await supabase.from("profiles").update({ display_name: displayName }).eq("id", user.id);
+      if (error) throw error;
+      toast.success("Сохранено");
+      invalidate("profile", "members");
+    } catch (error) {
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function avatar(f?: File) {
-    if (!f) return;
-    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[f.type];
+  async function avatar(file?: File) {
+    if (!file) return;
+    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
     if (!ext) { toast.error("Подойдёт фото JPG, PNG или WEBP"); return; }
-    if (f.size > MAX_AVATAR_BYTES) { toast.error("Фото больше 5 МБ"); return; }
+    if (!Number.isFinite(file.size) || file.size <= 0) { toast.error("Файл пустой или имеет неверный размер"); return; }
+    if (file.size > MAX_AVATAR_BYTES) { toast.error("Фото больше 5 МБ"); return; }
+
     setBusy(true);
     const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("avatars").upload(path, f, { contentType: f.type });
-    if (!error) {
-      const old = profile.data?.avatar_path;
-      await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
-      if (old) await supabase.storage.from("avatars").remove([old]);
+    let uploaded = false;
+    try {
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (uploadError) throw uploadError;
+      uploaded = true;
+
+      // Keep the previous avatar until the profile points to the new file.
+      const { error: profileError } = await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
+      if (profileError) throw profileError;
+
+      const oldPath = profile.data?.avatar_path;
       invalidate("profile", "members");
       toast.success("Фото обновлено");
-    } else toast.error(errText(error));
-    setBusy(false);
+
+      // Old-file cleanup is best-effort; a cleanup failure must not undo a successful profile update.
+      if (oldPath && oldPath !== path) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from("avatars").remove([oldPath]);
+          if (cleanupError) console.warn("Не удалось удалить старое фото профиля", cleanupError);
+        } catch (cleanupError) {
+          // The profile already points to the new avatar; cleanup must never roll it back.
+          console.warn("Не удалось удалить старое фото профиля", cleanupError);
+        }
+      }
+    } catch (error) {
+      // Avoid leaving an orphaned upload if saving the profile reference failed.
+      if (uploaded) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from("avatars").remove([path]);
+          if (cleanupError) console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+        } catch (cleanupError) {
+          // Preserve the original profile-save error if best-effort cleanup also fails.
+          console.warn("Не удалось удалить неиспользуемое фото", cleanupError);
+        }
+      }
+      toast.error(errText(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <AppShell title="Профиль">
+    <AppShell title="Профиль" {...(membership.data ? { role: membership.data.role } : {})}>
       <div className="mx-auto max-w-md p-6">
-        {profile.isLoading ? <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-label="Загрузка" /> : (
+        {profile.isLoading ? <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-label="Загрузка" /> : profile.isError ? <div role="alert" className="rounded-2xl border bg-card p-6 text-center"><p className="text-destructive">{errText(profile.error)}</p><Button type="button" variant="outline" className="mt-3" onClick={() => profile.refetch()}>Повторить</Button></div> : (
           <form onSubmit={save} className="rounded-3xl border bg-card p-6 shadow-soft">
             <div className="flex flex-col items-center">
               <UserAvatar name={profile.data?.display_name} path={profile.data?.avatar_path} className="size-28 text-3xl" />

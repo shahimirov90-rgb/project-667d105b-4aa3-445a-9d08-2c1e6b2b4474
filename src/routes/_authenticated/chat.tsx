@@ -31,11 +31,16 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState("");
   const [highlight, setHighlight] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
   const isAdmin = role !== "member";
 
   const members = useMembers(familyId);
@@ -59,7 +64,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       return data;
     },
   });
-  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id));
+  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id), isAdmin);
   const e2ee = keys.data;
   const plain = useQuery({
     queryKey: ["decrypted", familyId, ids.join(","), e2ee ? [...e2ee.keys.keys()].join(",") : ""],
@@ -98,63 +103,104 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     if (!f) return;
     const v = validateMedia(f);
     if (!v.ok) { toast.error(v.error); return; }
-    if (pending) URL.revokeObjectURL(pending.preview);
-    setPending({ file: f, preview: URL.createObjectURL(f), kind: v.kind, ext: v.ext, progress: null });
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const preview = URL.createObjectURL(f);
+    previewUrlRef.current = preview;
+    setPending({ file: f, preview, kind: v.kind, ext: v.ext, progress: null });
   }
   function clearPending() {
     pending?.abort?.();
-    if (pending) URL.revokeObjectURL(pending.preview);
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = null;
     setPending(null);
   }
 
   async function send(e?: FormEvent) {
     e?.preventDefault();
+    if (sendingRef.current) return;
     const body = text.trim();
     if (!body && !pending) return;
     if (body && (!e2ee || !canSendText)) { toast.error("Ключ шифрования ещё не получен — текст пока отправить нельзя"); return; }
+    sendingRef.current = true;
     setSending(true);
     let media: { media_path: string; media_type: string; media_mime: string; media_size: number } | null = null;
     try {
       if (pending) {
-        const path = `${familyId}/${userId}/${crypto.randomUUID()}.${pending.ext}`;
+        const path = [familyId, userId, crypto.randomUUID() + "." + pending.ext].join("/");
+        // Track the intended object before upload starts so an aborted/failed
+        // transfer can also attempt to remove a partially persisted object.
+        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
         const up = uploadWithProgress("family-media", path, pending.file, (p) => setPending((s) => (s ? { ...s, progress: p } : s)));
         setPending((s) => (s ? { ...s, progress: 0, abort: up.abort } : s));
         await up.promise;
-        media = { media_path: path, media_type: pending.kind, media_mime: pending.file.type, media_size: pending.file.size };
       }
       const cipher = body ? await encryptForFamily(e2ee!, familyId, userId, body) : null;
       const { error } = await supabase.from("messages").insert({ family_id: familyId, user_id: userId, body: null, ...cipher, reply_to_id: replyTo?.id ?? null, ...media });
-      if (error) {
-        if (media) await supabase.storage.from("family-media").remove([media.media_path]);
-        throw error;
-      }
+      if (error) throw error;
       setText(""); setReplyTo(null);
-      if (pending) URL.revokeObjectURL(pending.preview);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
       setPending(null);
       invalidate("messages");
     } catch (err) {
+      // If upload succeeded but encryption or message insertion failed, remove
+      // the unattached object so failed sends do not leak private media in storage.
+      if (media) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from("family-media").remove([media.media_path]);
+          if (cleanupError) console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+        } catch (cleanupError) {
+          console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+        }
+      }
       toast.error(errText(err));
       setPending((s) => (s ? { ...s, progress: null, abort: undefined } : s));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
 
   async function toggleReaction(m: Msg, emoji: string) {
-    const mine = reactions.data?.some((r) => r.message_id === m.id && r.user_id === userId && r.emoji === emoji);
-    const { error } = mine
-      ? await supabase.from("message_reactions").delete().match({ message_id: m.id, user_id: userId, emoji })
-      : await supabase.from("message_reactions").insert({ message_id: m.id, user_id: userId, emoji, family_id: familyId });
-    if (error) toast.error(errText(error));
-    invalidate("reactions");
+    try {
+      const mine = reactions.data?.some((r) => r.message_id === m.id && r.user_id === userId && r.emoji === emoji);
+      const { error } = mine
+        ? await supabase.from("message_reactions").delete().match({ message_id: m.id, user_id: userId, emoji })
+        : await supabase.from("message_reactions").insert({ message_id: m.id, user_id: userId, emoji, family_id: familyId });
+      if (error) throw error;
+      invalidate("reactions");
+    } catch (error) {
+      toast.error(errText(error));
+    }
   }
 
   async function remove(m: Msg) {
     if (!confirm("Удалить сообщение для всех?")) return;
-    const { error } = await supabase.from("messages").delete().eq("id", m.id);
-    if (error) { toast.error(errText(error)); return; }
-    if (m.media_path && m.user_id === userId) await supabase.storage.from("family-media").remove([m.media_path]);
-    invalidate("messages");
+    // Storage DELETE is limited to the object owner. Do not let an admin delete
+    // another member's media message until a server-side cleanup operation exists.
+    if (m.media_path && m.user_id !== userId) {
+      toast.error("Пока нельзя удалить медиафайл другого участника: требуется безопасная серверная очистка.");
+      return;
+    }
+    try {
+      const { error } = await supabase.from("messages").delete().eq("id", m.id);
+      if (error) throw error;
+      if (m.media_path) {
+        try {
+          const { error: storageError } = await supabase.storage.from("family-media").remove([m.media_path]);
+          if (storageError) {
+            console.error("[Chat] Message deleted but its media cleanup failed", storageError);
+            toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
+          }
+        } catch (storageError) {
+          console.error("[Chat] Message deleted but its media cleanup failed", storageError);
+          toast.warning("Сообщение удалено, но файл не удалось очистить из хранилища.");
+        }
+      }
+      invalidate("messages");
+    } catch (error) {
+      toast.error(errText(error));
+    }
   }
 
   function jumpTo(id: string) {
@@ -178,7 +224,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       ) : e2ee?.status === "unsupported" ? (
         <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Этот браузер не поддерживает шифрование. Откройте чат в современном браузере (Chrome, Safari, Firefox).</p>
       ) : e2ee?.status === "waiting" ? (
-        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Он придёт автоматически, когда кто-то из родных откроет чат. Пока можно отправлять только фото и видео.</p>
+        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Владелец или администратор должен открыть чат или страницу семьи, чтобы передать ключ. Пока можно отправлять только фото и видео.</p>
       ) : null}
       <details className="border-b bg-card/60 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-semibold">🔐 Как защищена переписка</summary>
@@ -294,7 +340,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
                 <p className="text-xs text-muted-foreground">{(pending.file.size / 1024 / 1024).toFixed(1)} МБ</p>
                 {pending.progress !== null && <Progress value={pending.progress} className="mt-1" aria-label={`Загрузка ${pending.progress}%`} />}
               </div>
-              <Button type="button" variant="ghost" size="sm" aria-label={pending.progress !== null ? "Отменить загрузку" : "Убрать файл"} onClick={clearPending}><X /></Button>
+              <Button type="button" variant="ghost" size="sm" aria-label={pending.progress !== null ? "Отменить загрузку" : "Убрать файл"} onClick={clearPending} disabled={sending && !pending.abort}><X /></Button>
             </div>
           )}
           <div className="flex items-end gap-2">

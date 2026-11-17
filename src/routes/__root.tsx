@@ -10,10 +10,15 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { installPreviewStorageGuard } from "@/lib/preview-storage-guard";
 import { supabase } from "@/integrations/supabase/client";
+
+// Run before the generated Supabase client first accesses the preview storage adapter.
+installPreviewStorageGuard();
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { setupServiceWorker } from "@/lib/pwa";
 
 function NotFoundComponent() {
   return (
@@ -84,6 +89,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Семейный круг" },
+      { name: "theme-color", content: "#C86140" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-title", content: "Семья" },
       { name: "description", content: "Закрытый семейный чат для фото, видео и тёплых сообщений." },
       { property: "og:title", content: "Семейный круг" },
       { property: "og:description", content: "Закрытый семейный чат для фото, видео и тёплых сообщений." },
@@ -96,7 +105,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Nunito:wght@400;600;700;800&subset=cyrillic&display=swap" },
@@ -124,6 +135,9 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => {
+    void setupServiceWorker();
+  }, []);
   const router = useRouter();
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {

@@ -27,6 +27,7 @@ const EXT: Record<string, string> = {
 export function validateMedia(file: { type: string; size: number }):
   | { ok: true; kind: "image" | "video"; ext: string }
   | { ok: false; error: string } {
+  if (!Number.isFinite(file.size) || file.size <= 0) return { ok: false, error: "Файл пустой или имеет неверный размер" };
   if (IMAGE_TYPES.includes(file.type)) {
     if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: "Фото больше 15 МБ" };
     return { ok: true, kind: "image", ext: EXT[file.type] ?? "bin" };
@@ -41,9 +42,31 @@ export function validateMedia(file: { type: string; size: number }):
 export function useUser() {
   const [user, setUser] = useState<User | null>(null);
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
-    return () => data.subscription.unsubscribe();
+    let active = true;
+    let authChanged = false;
+    // Subscribe before restoring the session so a slow getUser() response cannot
+    // overwrite a newer SIGNED_IN / SIGNED_OUT event.
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      authChanged = true;
+      setUser(s?.user ?? null);
+    });
+    void supabase.auth.getUser().then(({ data: result, error }) => {
+      if (!active || authChanged) return;
+      if (error) {
+        console.warn("[Auth] Could not restore the current user", error);
+        setUser(null);
+        return;
+      }
+      setUser(result.user);
+    }).catch((error: unknown) => {
+      if (!active || authChanged) return;
+      console.warn("[Auth] Could not restore the current user", error);
+      setUser(null);
+    });
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
   return user;
 }
@@ -52,6 +75,9 @@ export function useMyMembership(userId?: string) {
   return useQuery({
     queryKey: ["membership", userId],
     enabled: !!userId,
+    // Keep the family gate in sync when a member is removed or leaves elsewhere.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("family_members")
@@ -68,6 +94,9 @@ export function useMembers(familyId?: string) {
   return useQuery({
     queryKey: ["members", familyId],
     enabled: !!familyId,
+    // Membership changes affect E2EE key rotation and must propagate to open chats.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("family_members")
@@ -88,6 +117,25 @@ export function useProfile(userId?: string) {
       const { data, error } = await supabase.from("profiles").select("*").eq("id", userId!).single();
       if (error) throw error;
       return data;
+    },
+  });
+}
+
+/** Sign a gallery's files in one Storage request instead of one request per thumbnail. */
+export function useSignedUrls(bucket: "family-media" | "avatars", paths?: string[]) {
+  const uniquePaths = [...new Set(paths ?? [])].sort();
+  return useQuery({
+    queryKey: ["signed-batch", bucket, uniquePaths.join("\u0000")],
+    enabled: uniquePaths.length > 0,
+    staleTime: 50 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrls(uniquePaths, 3600);
+      if (error) throw error;
+      return new Map(
+        (data ?? []).flatMap((item) =>
+          item.path && item.signedUrl ? [[item.path, item.signedUrl] as const] : [],
+        ),
+      );
     },
   });
 }
@@ -118,25 +166,38 @@ export function uploadWithProgress(
   onProgress: (pct: number) => void,
 ): { promise: Promise<void>; abort: () => void } {
   const xhr = new XMLHttpRequest();
+  let aborted = false;
   const promise = (async () => {
-    const { data } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
     const token = data.session?.access_token;
     if (!token) throw new Error("Сессия истекла, войдите снова");
-    const url = `${import.meta.env['VITE_SUPABASE_URL']}/storage/v1/object/${bucket}/${path}`;
+    if (aborted) throw new Error("Загрузка отменена");
+    const url = String(import.meta.env['VITE_SUPABASE_URL']) + "/storage/v1/object/" + bucket + "/" + path;
     await new Promise<void>((resolve, reject) => {
       xhr.open("POST", url);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
       xhr.setRequestHeader("apikey", import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY']);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.setRequestHeader("x-upsert", "false");
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error("Не удалось загрузить файл")));
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Не удалось загрузить файл")));
       xhr.onerror = () => reject(new Error("Ошибка сети при загрузке"));
       xhr.onabort = () => reject(new Error("Загрузка отменена"));
+      if (aborted) {
+        reject(new Error("Загрузка отменена"));
+        return;
+      }
       xhr.send(file);
     });
   })();
-  return { promise, abort: () => xhr.abort() };
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+      xhr.abort();
+    },
+  };
 }
 
 export function formatTime(iso: string) {
