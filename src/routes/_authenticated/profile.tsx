@@ -44,13 +44,25 @@ function Profile() {
     setBusy(true);
     const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from("avatars").upload(path, f, { contentType: f.type });
-    if (!error) {
-      const old = profile.data?.avatar_path;
-      await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
-      if (old) await supabase.storage.from("avatars").remove([old]);
-      invalidate("profile", "members");
-      toast.success("Фото обновлено");
-    } else toast.error(errText(error));
+    if (error) {
+      toast.error(errText(error));
+      setBusy(false);
+      return;
+    }
+    const old = profile.data?.avatar_path;
+    const { error: profileError } = await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
+    if (profileError) {
+      await supabase.storage.from("avatars").remove([path]);
+      toast.error(errText(profileError));
+      setBusy(false);
+      return;
+    }
+    if (old && old !== path) {
+      const { error: removeError } = await supabase.storage.from("avatars").remove([old]);
+      if (removeError) toast.error("Фото обновлено, но предыдущее фото не удалось удалить");
+    }
+    invalidate("profile", "members");
+    toast.success("Фото обновлено");
     setBusy(false);
   }
 
