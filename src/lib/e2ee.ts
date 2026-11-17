@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { decryptText, e2eeSupported, encryptText, exportPublicJwk, fingerprint, generateDeviceKeyPair, generateFamilyKey, unwrapFamilyKey, wrapFamilyKey } from "./e2ee-crypto";
-import { canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
+import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
 
 /* ---------- device key storage (IndexedDB, private key non-extractable) ---------- */
 type StoredDevice = { deviceId: string; privateKey: CryptoKey; publicJwk: JsonWebKey };
@@ -150,7 +150,7 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
     // Existing members can restore their history on a replacement device.
     // A newly joined member receives only versions created after joining.
     const eligible = devices.filter((d) => {
-      if (have.has(d.id)) return false;
+      if (have.has(d.id) || !canDistributeKeyTo(userId, d.user_id, canManageKeys)) return false;
       const joinedAt = joinedAtByUser.get(d.user_id);
       return !!joinedAt && canReceiveKeyVersion(joinedAt, version.created_at);
     });
