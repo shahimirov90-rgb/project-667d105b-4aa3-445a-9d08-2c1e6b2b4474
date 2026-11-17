@@ -15,6 +15,13 @@
       "when": 1794924254317,
       "tag": "0001_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794924640845,
+      "tag": "0002_fix_reply_policy",
+      "breakpoints": true
     }
   ]
 }
