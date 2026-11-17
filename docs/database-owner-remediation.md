@@ -81,3 +81,10 @@ Do not broaden Storage DELETE policy to all family members. Add tests for author
 6. Only then schedule production migration/deployment with a backup and rollback plan.
 
 No database writes or migrations were performed as part of this GitHub review.
+
+
+## External hosting and authentication
+
+The app can use Supabase Auth directly for Google sign-in; this avoids the Lovable Cloud OAuth redirect dependency when deployed elsewhere. The UI now calls `supabase.auth.signInWithOAuth({ provider: "google" })`. Before enabling it in production, the project owner must enable Google in Supabase Authentication, configure the Google OAuth client and add the deployed app URL to Supabase's allowed redirect URLs. No OAuth client secret belongs in GitHub source or browser variables.
+
+Cloudflare deployment remains unverified until a real Cloudflare account has been connected and the production Worker has been smoke-tested. A deployment workflow alone does not publish the app.
