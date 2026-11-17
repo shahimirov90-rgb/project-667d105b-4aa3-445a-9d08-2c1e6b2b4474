@@ -84,7 +84,9 @@ function InvitePage() {
       <div className="w-full max-w-md rounded-3xl border bg-card p-8 text-center shadow-soft">
         {!checked || preview.isLoading ? (
           <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-label="Загрузка" />
-        ) : authCheckError ? (\n          <div role="alert"><p className="text-destructive">Не удалось проверить авторизацию. {authCheckError}</p><Button className="mt-4" onClick={() => window.location.reload()}>Повторить</Button></div>\n        ) : preview.isError ? (
+        ) : authCheckError ? (
+          <div role="alert"><p className="text-destructive">Не удалось проверить авторизацию. {authCheckError}</p><Button className="mt-4" onClick={() => window.location.reload()}>Повторить</Button></div>
+        ) : preview.isError ? (
           <p className="text-destructive">Не удалось проверить приглашение. {errText(preview.error)}</p>
         ) : !p || !p.valid ? (
           <>
