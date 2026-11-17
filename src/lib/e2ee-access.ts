@@ -16,7 +16,8 @@ function timestampMicros(value: string): number | null {
 export function canReceiveKeyVersion(joinedAt: string, keyCreatedAt: string): boolean {
   const joined = timestampMicros(joinedAt);
   const created = timestampMicros(keyCreatedAt);
-  return joined !== null && created !== null && joined <= created;
+  // Equality is ambiguous at PostgreSQL's microsecond precision; fail closed.
+  return joined !== null && created !== null && joined < created;
 }
 
 /** A membership created after the latest key version requires a fresh family key. */
