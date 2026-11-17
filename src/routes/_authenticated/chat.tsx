@@ -170,16 +170,9 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b bg-card/60 px-3 py-2">
-        <p className="flex-1 truncate text-sm text-muted-foreground">{canSendText ? "🔐 Текст сообщений зашифрован на устройствах" : "🔒 Доступ только участникам семьи"} · {members.data?.length ?? "…"} чел.</p>
+        <p className="flex-1 truncate text-sm text-muted-foreground">Участники семьи · {members.data?.length ?? "…"} чел.</p>
         <Button variant="ghost" size="icon" aria-label="Поиск по сообщениям" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}><Search /></Button>
       </div>
-      {keys.isError ? (
-        <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Не удалось подготовить ключи шифрования: {errText(keys.error)}. Текстовые сообщения временно недоступны.</p>
-      ) : e2ee?.status === "unsupported" ? (
-        <p className="border-b bg-destructive/10 px-3 py-2 text-sm" role="alert">Этот браузер не поддерживает шифрование. Откройте чат в современном браузере (Chrome, Safari, Firefox).</p>
-      ) : e2ee?.status === "waiting" ? (
-        <p className="flex items-start gap-2 border-b bg-accent px-3 py-2 text-sm text-accent-foreground" role="status"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />Ждём ключ шифрования для этого устройства. Он придёт автоматически, когда кто-то из родных откроет чат. Пока можно отправлять только фото и видео.</p>
-      ) : null}
       <details className="border-b bg-card/60 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-semibold">🔐 Как защищена переписка</summary>
         <div className="mt-2 space-y-1 text-muted-foreground">
