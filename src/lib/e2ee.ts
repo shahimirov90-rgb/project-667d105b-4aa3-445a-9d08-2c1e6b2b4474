@@ -97,8 +97,8 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   const latest = Math.max(...versions.data.map((v) => v.version));
   const fp = await fingerprint(me.publicJwk);
 
-  // Detect revoked/former-member recipients before requiring this device to hold
-  // the latest key; otherwise the remaining family devices can wait forever.
+  // Detect former-member/revoked-device shares and orphaned versions before requiring
+  // this device to hold the latest key. Only an owner/admin may rotate the family key.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
   const needsRotation = latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id));
   if (needsRotation) {
