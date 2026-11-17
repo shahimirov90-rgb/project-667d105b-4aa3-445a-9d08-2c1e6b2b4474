@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_authenticated/gallery")({
 
 type Item = { id: string; user_id: string; media_path: string; media_type: string | null; created_at: string; body: string | null };
 
-function Thumb({ item, url, loading, error }: { item: Item; url?: string; loading: boolean; error: boolean }) {
+function Thumb({ item, url, loading, error }: { item: Item; url: string | undefined; loading: boolean; error: boolean }) {
   if (loading) return <div className="flex size-full items-center justify-center bg-muted"><Loader2 className="animate-spin text-muted-foreground" aria-hidden /></div>;
   if (error || !url) return <div className="flex size-full items-center justify-center bg-muted p-2 text-center text-xs text-muted-foreground">Файл недоступен</div>;
   return item.media_type === "video" ? (
