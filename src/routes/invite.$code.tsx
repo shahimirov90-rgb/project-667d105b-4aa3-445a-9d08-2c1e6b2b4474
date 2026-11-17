@@ -39,8 +39,8 @@ function InvitePage() {
         if (error) throw error;
         if (!active) return;
         if (!data.user) {
-          try { sessionStorage.setItem("pendingInvite", code); } catch { /* Session storage may be disabled. */ }
-          navigate({ to: "/auth", replace: true });
+          try { sessionStorage.setItem("pendingInvite", code); } catch { /* Query parameter below preserves the invite. */ }
+          navigate({ href: `/auth?invite=${encodeURIComponent(code)}`, replace: true });
         } else {
           setChecked(true);
         }
@@ -87,7 +87,10 @@ function InvitePage() {
         ) : authCheckError ? (
           <div role="alert"><p className="text-destructive">Не удалось проверить авторизацию. {authCheckError}</p><Button className="mt-4" onClick={() => window.location.reload()}>Повторить</Button></div>
         ) : preview.isError ? (
-          <p className="text-destructive">Не удалось проверить приглашение. {errText(preview.error)}</p>
+          <div role="alert">
+            <p className="text-destructive">Не удалось проверить приглашение. {errText(preview.error)}</p>
+            <Button className="mt-4" variant="outline" onClick={() => preview.refetch()}>Повторить</Button>
+          </div>
         ) : !p || !p.valid ? (
           <>
             <div className="text-5xl" aria-hidden>🔗</div>
