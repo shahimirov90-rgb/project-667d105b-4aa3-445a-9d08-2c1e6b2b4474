@@ -40,3 +40,6 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      - name: Build production app
+        run: bun run build
