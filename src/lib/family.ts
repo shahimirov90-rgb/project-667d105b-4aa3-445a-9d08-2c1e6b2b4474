@@ -43,20 +43,26 @@ export function useUser() {
   const [user, setUser] = useState<User | null>(null);
   useEffect(() => {
     let active = true;
-    void supabase.auth.getUser().then(({ data, error }) => {
-      if (!active) return;
+    let authChanged = false;
+    // Subscribe before restoring the session so a slow getUser() response cannot
+    // overwrite a newer SIGNED_IN / SIGNED_OUT event.
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      authChanged = true;
+      setUser(s?.user ?? null);
+    });
+    void supabase.auth.getUser().then(({ data: result, error }) => {
+      if (!active || authChanged) return;
       if (error) {
         console.warn("[Auth] Could not restore the current user", error);
         setUser(null);
         return;
       }
-      setUser(data.user);
+      setUser(result.user);
     }).catch((error: unknown) => {
-      if (!active) return;
+      if (!active || authChanged) return;
       console.warn("[Auth] Could not restore the current user", error);
       setUser(null);
     });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
     return () => {
       active = false;
       data.subscription.unsubscribe();
