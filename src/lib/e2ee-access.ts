@@ -12,7 +12,7 @@ function timestampMicros(value: string): number | null {
   return Number.isSafeInteger(exact) ? exact : null;
 }
 
-/** A member may receive only key versions created at or after their join time. */
+/** A member may receive only key versions created strictly after their join time. */
 export function canReceiveKeyVersion(joinedAt: string, keyCreatedAt: string): boolean {
   const joined = timestampMicros(joinedAt);
   const created = timestampMicros(keyCreatedAt);
