@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Images, LogOut, MessageCircleHeart, Settings, UserRound, Users } from "lucide-react";
+import type { Role } from "@/lib/family";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,10 @@ const NAV = [
   { to: "/profile", label: "Профиль", icon: UserRound },
 ] as const;
 
-export function AppShell({ title, children, wide, admin }: { title: string; children: ReactNode; wide?: boolean | undefined; admin?: boolean | undefined }) {
+export function AppShell({ title, children, wide, role }: { title: string; children: ReactNode; wide?: boolean | undefined; role?: Role }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const items = admin ? [...NAV, { to: "/family" as const, label: "Настройки", icon: Settings }] : NAV;\n  async function signOut() {
+  async function signOut() {
     await qc.cancelQueries();
     qc.clear();
     await supabase.auth.signOut();
@@ -28,8 +29,8 @@ export function AppShell({ title, children, wide, admin }: { title: string; chil
           <span aria-hidden>🏡</span> Семейный круг
         </Link>
         <nav className="flex flex-col gap-1" aria-label="Основное меню">
-          {items.map(({ to, label, icon: Icon }) => (
-            <Link key={`${to}-${label}`} to={to} hash={label === "Настройки" ? "settings" : undefined} className="flex items-center gap-3 rounded-xl px-4 py-3 text-lg font-semibold text-sidebar-foreground hover:bg-sidebar-accent" activeProps={{ className: "bg-sidebar-accent text-primary" }}>
+          {NAV.map(({ to, label, icon: Icon }) => (
+            <Link key={to} to={to} className="flex items-center gap-3 rounded-xl px-4 py-3 text-lg font-semibold text-sidebar-foreground hover:bg-sidebar-accent" activeProps={{ className: "bg-sidebar-accent text-primary" }}>
               <Icon className="size-5" aria-hidden /> {label}
             </Link>
           ))}
@@ -42,7 +43,14 @@ export function AppShell({ title, children, wide, admin }: { title: string; chil
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b bg-card/80 px-4 py-3 backdrop-blur md:px-6">
           <h1 className="truncate text-xl font-semibold md:text-2xl">{title}</h1>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={signOut} aria-label="Выйти"><LogOut /></Button>
+          <div className="flex items-center gap-1">
+            {(role === "owner" || role === "admin") && (
+              <Button asChild variant="ghost" size="icon" aria-label="Настройки администратора" title="Настройки администратора">
+                <Link to="/family" hash="admin-settings"><Settings /></Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="md:hidden" onClick={signOut} aria-label="Выйти"><LogOut /></Button>
+          </div>
         </header>
         <main className={wide ? "flex min-h-0 flex-1 flex-col" : "min-h-0 flex-1 overflow-y-auto"}>{children}</main>
         <nav className="grid grid-cols-4 border-t bg-card md:hidden" aria-label="Основное меню">
