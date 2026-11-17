@@ -35,7 +35,6 @@ export function AppShell({ title, children, wide, isAdmin = false }: { title: st
           ))}
         </nav>
         <div className="mt-auto">
-          <p className="mb-3 px-2 text-xs text-muted-foreground">🔐 Текст сообщений зашифрован. Фото и видео видят только участники семьи.</p>
           <Button variant="ghost" className="w-full justify-start" onClick={signOut}><LogOut /> Выйти</Button>
         </div>
       </aside>
