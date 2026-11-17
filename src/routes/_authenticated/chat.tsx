@@ -301,7 +301,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} tabIndex={-1} aria-hidden />
             <Button type="button" variant="outline" size="icon" aria-label="Прикрепить фото или видео" onClick={() => fileRef.current?.click()} disabled={sending}><Paperclip /></Button>
             <textarea
-              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder={canSendText ? "Напишите сообщение…" : "Ждём ключ шифрования…"} disabled={!canSendText} aria-label="Текст сообщения"
+              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder="Напишите сообщение…" aria-label="Текст сообщения"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               className="max-h-40 min-h-11 flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
