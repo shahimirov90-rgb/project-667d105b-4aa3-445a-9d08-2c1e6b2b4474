@@ -16,3 +16,8 @@ export function requiresFamilyKeyRotation(activeDeviceIds: string[], latestShare
   for (const id of shared) if (!active.has(id)) return true;
   return false;
 }
+
+/** Only owners/admins may distribute family keys to another member's device. */
+export function canDistributeKeyTo(senderUserId: string, recipientUserId: string, canManageKeys: boolean): boolean {
+  return canManageKeys || senderUserId === recipientUserId;
+}
