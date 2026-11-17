@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { errText, ROLE_LABEL, useInvalidate, useMembers, type Role } from "@/lib/family";
+import { useFamilyKeys } from "@/lib/e2ee";
 
 export const Route = createFileRoute("/_authenticated/family")({
   head: () => ({ meta: [{ title: "Семья и приглашения — Семейный круг" }, { name: "description", content: "Участники, роли, заявки и приглашения." }, { property: "og:title", content: "Моя семья" }, { property: "og:description", content: "Участники, роли, заявки и приглашения." }] }),
@@ -32,6 +33,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
   const isAdmin = role !== "member";
   const invalidate = useInvalidate();
   const members = useMembers(familyId);
+  const keySync = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id), isAdmin);
   const [famName, setFamName] = useState(ctx.familyName);
   const [inviteBusy, setInviteBusy] = useState(false);
   useEffect(() => setFamName(ctx.familyName), [ctx.familyName]);
@@ -104,7 +106,11 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
-      <p className="rounded-2xl bg-accent p-4 text-accent-foreground">🔒 <b>Приватность:</b> сообщения, фото и видео доступны только участникам этой семьи. Текст сообщений дополнительно зашифрован на устройствах; при удалении или выходе участника ключ автоматически меняется. Новые родственники попадают сюда только после одобрения владельца или администратора.</p>
+      <p className="rounded-2xl bg-accent p-4 text-accent-foreground">🔒 <b>Приватность:</b> сообщения, фото и видео доступны только участникам этой семьи. Текст сообщений дополнительно зашифрован на устройствах; после удаления или выхода участника владелец или администратор должен открыть чат или эту страницу, чтобы обновить ключ. Новые родственники попадают сюда только после одобрения владельца или администратора.</p>
+
+      {keySync.isError && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">Не удалось проверить ключ шифрования: {errText(keySync.error)}. Повторная проверка будет выполнена автоматически.</p>}
+      {keySync.data?.status === "waiting" && <p role="status" className="rounded-xl bg-accent p-3 text-sm text-accent-foreground">Для этого устройства пока нет ключа шифрования. Владелец или администратор должен открыть чат или страницу семьи, чтобы передать ключ.</p>}
+      {keySync.data?.status === "unsupported" && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">Браузер не поддерживает необходимое шифрование.</p>}
 
       {isAdmin && (
         <Section title="Заявки на вступление" hint="Одобряйте только тех, кого знаете лично.">
