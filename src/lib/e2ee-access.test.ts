@@ -4,7 +4,7 @@ import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation, re
 describe("E2EE family key access", () => {
   it("allows a member to receive versions created after they joined", () => {
     expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "2026-01-01T10:00:01.000Z")).toBe(true);
-    expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "2026-01-01T10:00:00.000Z")).toBe(true);
+    expect(canReceiveKeyVersion("2026-01-01T10:00:00.000Z", "2026-01-01T10:00:00.000Z")).toBe(false);
   });
 
   it("does not give a new member access to versions created before joining", () => {
@@ -35,6 +35,7 @@ describe("E2EE family key access", () => {
   it("rotates as soon as a new member joins, even before their first device is registered", () => {
     expect(requiresMembershipKeyRotation(["2026-01-02T10:00:00.000Z"], "2026-01-01T10:00:00.000Z")).toBe(true);
     expect(requiresMembershipKeyRotation(["2026-01-01T10:00:00.000Z"], "2026-01-01T10:00:01.000Z")).toBe(false);
+    expect(requiresMembershipKeyRotation(["2026-01-01T10:00:00.000Z"], "2026-01-01T10:00:00.000Z")).toBe(true);
   });
 
   it("treats ambiguous membership timestamps as requiring rotation", () => {
