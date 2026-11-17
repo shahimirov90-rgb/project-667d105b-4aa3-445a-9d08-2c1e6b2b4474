@@ -75,6 +75,9 @@ export function useMyMembership(userId?: string) {
   return useQuery({
     queryKey: ["membership", userId],
     enabled: !!userId,
+    // Keep the family gate in sync when a member is removed or leaves elsewhere.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("family_members")
@@ -91,6 +94,9 @@ export function useMembers(familyId?: string) {
   return useQuery({
     queryKey: ["members", familyId],
     enabled: !!familyId,
+    // Membership changes affect E2EE key rotation and must propagate to open chats.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("family_members")
