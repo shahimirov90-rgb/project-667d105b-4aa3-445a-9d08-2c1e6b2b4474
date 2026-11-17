@@ -100,7 +100,10 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   // possess the latest key. Otherwise, if the removed device was the only holder of
   // that version, every remaining device would wait forever and never rotate it.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  if (latestHolders.some((id) => !activeIds.has(id)) && attempt < 3) {
+  // A version row can survive if its creator closed the tab or a share upload failed
+  // after inserting the version. With no shares, there is no recoverable key material.
+  // Skip that orphaned version instead of leaving every family device stuck in "waiting".
+  if ((latestHolders.length === 0 || latestHolders.some((id) => !activeIds.has(id))) && attempt < 3) {
     await createVersion(familyId, userId, latest + 1, devices);
     return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
   }
