@@ -24,7 +24,7 @@ See GitHub Issues #6, #7, #8, #13, #19, and #20 for findings and discussion.
   - Existing shares must be immutable; use conflict-safe inserts and do not permit replacement of another device's share.
 - Restrict device-key UPDATE to setting `revoked_at` from NULL to a timestamp on the caller's own active device. Do not permit public-key mutation or reactivation.
 - When a member is removed or leaves, revoke their active device registrations as part of the trusted membership RPC. On rejoin, require fresh device registration and a new family key version.
-- A membership timestamp newer than the latest key version must mark rotation as required, even before the new member registers a device. Enforce this in the membership/key lifecycle RPC.
+- A membership timestamp that is not strictly earlier than the latest key version must mark rotation as required, even before the new member registers a device. Enforce this in the membership/key lifecycle RPC.
 - The text-message INSERT policy/RPC must require `key_version` to equal the latest family version and require that the latest share set contains exactly the active family devices. Reject text inserts while a removed device still has a latest-version share or a current device is missing one; media-only messages may remain available.
 - Keep family-key reads limited to current family members.
 - Add tests for owner, admin, member, removed member, a member's own new device, another member's device, duplicate version, duplicate share, and revoked device.
