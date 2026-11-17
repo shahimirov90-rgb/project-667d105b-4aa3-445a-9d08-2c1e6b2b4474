@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { decryptText, e2eeSupported, encryptText, exportPublicJwk, fingerprint, generateDeviceKeyPair, generateFamilyKey, unwrapFamilyKey, wrapFamilyKey } from "./e2ee-crypto";
-import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation } from "./e2ee-access";
+import { canDistributeKeyTo, canReceiveKeyVersion, requiresFamilyKeyRotation, requiresMembershipKeyRotation } from "./e2ee-access";
 
 /* ---------- device key storage (IndexedDB, private key non-extractable) ---------- */
 type StoredDevice = { deviceId: string; privateKey: CryptoKey; publicJwk: JsonWebKey };
@@ -120,9 +120,12 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   // Detect former-member/revoked-device shares and orphaned versions before requiring
   // this device to hold the latest key. Only an owner/admin may rotate the family key.
   const latestHolders = shares.data.filter((s) => s.version === latest).map((s) => s.device_id);
-  // Rotate when a new active device appears as well as when a removed device
-  // still has a share. This ensures a newly approved member gets a fresh key.
-  const needsRotation = requiresFamilyKeyRotation([...activeIds], latestHolders);
+  const latestVersion = versions.data.find((item) => item.version === latest);
+  // Rotate for new/removed devices and as soon as membership changes, even before
+  // a newly approved member has registered their first device.
+  const needsRotation = requiresFamilyKeyRotation([...activeIds], latestHolders)
+    || !latestVersion
+    || requiresMembershipKeyRotation(memberships.data.map((m) => m.joined_at), latestVersion.created_at);
   if (needsRotation) {
     if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
     if (attempt >= 3) throw new Error("Не удалось обновить ключ шифрования семьи");
