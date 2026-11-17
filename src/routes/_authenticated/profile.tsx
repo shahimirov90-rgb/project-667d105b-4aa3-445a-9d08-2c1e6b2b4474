@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/family/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { errText, MAX_AVATAR_BYTES, useInvalidate, useProfile } from "@/lib/family";
+import { errText, MAX_AVATAR_BYTES, useInvalidate, useMyMembership, useProfile } from "@/lib/family";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "Профиль — Семейный круг" }, { name: "description", content: "Ваше имя и фото в семейном чате." }, { property: "og:title", content: "Профиль" }, { property: "og:description", content: "Ваше имя и фото в семейном чате." }] }),
@@ -19,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
 function Profile() {
   const { user } = AuthRoute.useRouteContext();
   const profile = useProfile(user.id);
+  const membership = useMyMembership(user.id);
   const invalidate = useInvalidate();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,7 +68,7 @@ function Profile() {
   }
 
   return (
-    <AppShell title="Профиль">
+    <AppShell title="Профиль" isAdmin={!!membership.data && membership.data.role !== "member"}>
       <div className="mx-auto max-w-md p-6">
         {profile.isLoading ? <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-label="Загрузка" /> : (
           <form onSubmit={save} className="rounded-3xl border bg-card p-6 shadow-soft">
