@@ -17,9 +17,9 @@ export const Route = createFileRoute("/_authenticated/family")({
   component: () => <FamilyGate title="Семья">{(ctx) => <FamilyPage ctx={ctx} />}</FamilyGate>,
 });
 
-function Section({ title, children, hint }: { title: string; hint?: string; children: React.ReactNode }) {
+function Section({ title, children, hint, id }: { title: string; hint?: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border bg-card p-5 shadow-soft md:p-6">
+    <section id={id} className="rounded-3xl border bg-card p-5 shadow-soft md:p-6">
       <h2 className="text-xl font-semibold">{title}</h2>
       {hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
       <div className="mt-4">{children}</div>
@@ -135,7 +135,7 @@ function FamilyPage({ ctx }: { ctx: FamilyCtx }) {
       </Section>
 
       {isAdmin && (
-        <Section title="Настройки семьи">
+        <Section id="admin-settings" title="Настройки семьи">
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); rpc(() => supabase.from("families").update({ name: famName.trim() }).eq("id", familyId), "Название сохранено", "membership"); }}>
             <Input value={famName} onChange={(e) => setFamName(e.target.value)} maxLength={80} required aria-label="Название семьи" />
             <Button type="submit">Сохранить</Button>
