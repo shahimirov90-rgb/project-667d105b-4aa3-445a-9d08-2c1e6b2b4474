@@ -111,7 +111,15 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   }
 
   const latestKey = keys.get(latest);
-  if (!latestKey) return { status: "waiting", keys, current: null, fingerprint: fp };
+  if (!latestKey) {
+    if (!canManageKeys) return { status: "waiting", keys, current: null, fingerprint: fp };
+    // An owner/admin on a replacement device may not possess the latest key.
+    // Since only an authorized role can create versions, rotate a fresh key and
+    // distribute it to active devices rather than leaving the family stuck.
+    if (attempt >= 3) throw new Error("Не удалось восстановить ключ шифрования семьи");
+    await createVersion(familyId, userId, latest + 1, devices);
+    return syncFamilyKeys(familyId, userId, memberIds, canManageKeys, attempt + 1);
+  }
 
   // Distribution: give every key version this device holds to member devices that don't have it yet
   // (new relatives after approval, relatives' new phones/browsers).
