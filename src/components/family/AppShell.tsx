@@ -5,6 +5,7 @@ import type { Role } from "@/lib/family";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const NAV = [
   { to: "/chat", label: "Чат", icon: MessageCircleHeart },
@@ -17,10 +18,16 @@ export function AppShell({ title, children, wide, role }: { title: string; child
   const qc = useQueryClient();
   const navigate = useNavigate();
   async function signOut() {
-    await qc.cancelQueries();
-    qc.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      await qc.cancelQueries();
+      qc.clear();
+      navigate({ to: "/auth", replace: true });
+    } catch (error) {
+      console.error("[AppShell] Sign-out failed", error);
+      toast.error("Не удалось выйти. Проверьте подключение и попробуйте ещё раз.");
+    }
   }
   return (
     <div className="flex h-dvh flex-col bg-background md:flex-row">
