@@ -31,6 +31,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState("");
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -116,9 +117,11 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
 
   async function send(e?: FormEvent) {
     e?.preventDefault();
+    if (sendingRef.current) return;
     const body = text.trim();
     if (!body && !pending) return;
     if (body && (!e2ee || !canSendText)) { toast.error("Ключ шифрования ещё не получен — текст пока отправить нельзя"); return; }
+    sendingRef.current = true;
     setSending(true);
     let media: { media_path: string; media_type: string; media_mime: string; media_size: number } | null = null;
     try {
@@ -141,12 +144,17 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       // If upload succeeded but encryption or message insertion failed, remove
       // the unattached object so failed sends do not leak private media in storage.
       if (media) {
-        const { error: cleanupError } = await supabase.storage.from("family-media").remove([media.media_path]);
-        if (cleanupError) console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+        try {
+          const { error: cleanupError } = await supabase.storage.from("family-media").remove([media.media_path]);
+          if (cleanupError) console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+        } catch (cleanupError) {
+          console.error("[Chat] Failed to clean up an unlinked media upload", cleanupError);
+        }
       }
       toast.error(errText(err));
       setPending((s) => (s ? { ...s, progress: null, abort: undefined } : s));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
