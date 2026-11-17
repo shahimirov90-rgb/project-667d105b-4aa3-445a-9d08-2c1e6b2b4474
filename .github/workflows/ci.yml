@@ -38,7 +38,7 @@ jobs:
       - name: Block high dependency advisories except documented upstream gaps
         run: >-
           bun audit --audit-level=high
-          --ignore GHSA-fc5q-39xc-vjpf
+         
           --ignore GHSA-mrhx-c7xc-m3w5
 
       # Existing repository formatting debt is handled separately; keep correctness rules active.
@@ -81,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          bun audit fix
+          bun audit fix --ignore-scripts
           set -e
           if git diff --quiet -- package.json bun.lock; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
