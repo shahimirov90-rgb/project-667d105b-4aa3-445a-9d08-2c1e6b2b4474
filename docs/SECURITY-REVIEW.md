@@ -27,7 +27,7 @@ This is broader than a design where only an explicitly authorized key-management
 
 A previous revision contained a `.env` file with Supabase project identifiers, URL, and a publishable client key. The security-hardening branch removes it from the proposed branch and adds ignore rules. The file is still present on `main` until the draft PR is merged.
 
-A Supabase publishable key is designed for client use; it is not equivalent to a service-role key. However, because the repository was public, inspect the full Git history and verify that no privileged keys, database credentials, or OAuth secrets were ever committed. Rotate any privileged credential that was exposed. Removing a file in a later commit does not erase earlier Git history.
+A Supabase publishable key is designed for client use; it is not equivalent to a service-role key. Current-branch GitHub code searches found no matches for `SUPABASE_SERVICE_ROLE_KEY`, `sb_secret_`, `postgres://`, `BEGIN PRIVATE KEY`, or `LOVABLE_API_KEY`. This is not a full history-wide scan: because the repository was public, inspect every historical commit and verify that no privileged keys, database credentials, or OAuth secrets were ever committed. Rotate any privileged credential that was exposed. Removing a file in a later commit does not erase earlier Git history.
 
 ### Medium priority: CI must remain green
 
