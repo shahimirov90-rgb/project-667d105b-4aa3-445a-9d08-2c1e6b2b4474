@@ -26,7 +26,10 @@ async function idbPut(userId: string, v: StoredDevice) {
 async function ensureDevice(userId: string): Promise<StoredDevice> {
   const saved = await idbGet(userId);
   if (saved) {
-    const { data } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    const { data, error } = await supabase.from("device_keys").select("id, revoked_at").eq("id", saved.deviceId).maybeSingle();
+    // Do not silently register another device when the lookup failed due to a network/RLS
+    // error. That creates duplicate device records and can make key distribution confusing.
+    if (error) throw error;
     if (data && !data.revoked_at) return saved;
   }
   const pair = await generateDeviceKeyPair();
@@ -61,7 +64,12 @@ async function shareTo(familyId: string, userId: string, version: number, key: C
 
 async function createVersion(familyId: string, userId: string, version: number, devices: Device[]) {
   const { error } = await supabase.from("family_keys").insert({ family_id: familyId, version, created_by: userId });
-  if (error) return false; // another relative created this version first
+  if (error) {
+    // A concurrent device may have won the unique (family_id, version) race.
+    // All other errors (permissions, connectivity, missing migration) must surface.
+    if (error.code === "23505") return false;
+    throw error;
+  }
   const key = await generateFamilyKey();
   await shareTo(familyId, userId, version, key, devices);
   return true;
@@ -71,7 +79,7 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
   if (!e2eeSupported()) return { status: "unsupported", keys: new Map(), current: null, fingerprint: null };
   const me = await ensureDevice(userId);
   const [versions, shares, devs] = await Promise.all([
-    supabase.from("family_keys").select("version").eq("family_id", familyId),
+    supabase.from("family_keys").select("version, created_at").eq("family_id", familyId),
     supabase.from("family_key_shares").select("version, device_id, eph_public_key, iv, wrapped_key").eq("family_id", familyId),
     supabase.from("device_keys").select("id, user_id, public_key").in("user_id", memberIds).is("revoked_at", null),
   ]);
@@ -93,7 +101,8 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
       keys.set(s.version, await unwrapFamilyKey({ eph_public_key: s.eph_public_key as JsonWebKey, iv: s.iv, wrapped_key: s.wrapped_key }, me.privateKey, { familyId, version: s.version, deviceId: me.deviceId }));
     } catch { /* corrupted or forged share: ignore */ }
   }
-  const latest = Math.max(...versions.data.map((v) => v.version));
+  const latestRow = versions.data.reduce((a, b) => a.version > b.version ? a : b);
+  const latest = latestRow.version;
   const fp = await fingerprint(me.publicJwk);
 
   // Distribute every key this device already holds BEFORE checking the latest version.
@@ -113,7 +122,12 @@ export async function syncFamilyKeys(familyId: string, userId: string, memberIds
       .filter((s) => s.version === latest)
       .map((s) => s.device_id);
     const hasActiveLatestHolder = latestHolders.some((id) => activeIds.has(id));
-    if (!hasActiveLatestHolder && keys.size > 0 && attempt < 3) {
+    // If a key-version row was created but its first share was never persisted,
+    // no device can recover that key. Allow a short grace period for an in-flight
+    // creator to publish it, then start a fresh version instead of waiting forever.
+    const createdAt = Date.parse(latestRow.created_at);
+    const orphanedForLongEnough = Number.isFinite(createdAt) && Date.now() - createdAt > 60_000;
+    if (!hasActiveLatestHolder && (keys.size > 0 || orphanedForLongEnough) && attempt < 3) {
       await createVersion(familyId, userId, latest + 1, devices);
       return syncFamilyKeys(familyId, userId, memberIds, attempt + 1);
     }
