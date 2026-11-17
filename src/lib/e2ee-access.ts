@@ -19,6 +19,11 @@ export function canReceiveKeyVersion(joinedAt: string, keyCreatedAt: string): bo
   return joined !== null && created !== null && joined <= created;
 }
 
+/** A membership created after the latest key version requires a fresh family key. */
+export function requiresMembershipKeyRotation(joinedAtValues: string[], latestKeyCreatedAt: string): boolean {
+  return joinedAtValues.some((joinedAt) => !canReceiveKeyVersion(joinedAt, latestKeyCreatedAt));
+}
+
 /** Rotate whenever the active-device set and latest-version share set differ. */
 export function requiresFamilyKeyRotation(activeDeviceIds: string[], latestShareDeviceIds: string[]): boolean {
   const active = new Set(activeDeviceIds);
