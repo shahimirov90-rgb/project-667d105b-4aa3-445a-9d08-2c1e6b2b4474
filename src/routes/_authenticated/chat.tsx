@@ -156,7 +156,10 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     if (!confirm("Удалить сообщение для всех?")) return;
     const { error } = await supabase.from("messages").delete().eq("id", m.id);
     if (error) { toast.error(errText(error)); return; }
-    if (m.media_path && m.user_id === userId) await supabase.storage.from("family-media").remove([m.media_path]);
+    if (m.media_path && (m.user_id === userId || isAdmin)) {
+      const { error: mediaError } = await supabase.storage.from("family-media").remove([m.media_path]);
+      if (mediaError) toast.error("Сообщение удалено, но вложение не удалось удалить");
+    }
     invalidate("messages");
   }
 
