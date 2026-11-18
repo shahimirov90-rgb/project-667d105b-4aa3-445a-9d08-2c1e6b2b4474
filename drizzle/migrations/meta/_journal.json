@@ -43,6 +43,13 @@
       "when": 1795000000000,
       "tag": "0005_restrict_e2ee_key_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795001000000,
+      "tag": "0006_admin_media_cleanup",
+      "breakpoints": true
     }
   ]
 }
