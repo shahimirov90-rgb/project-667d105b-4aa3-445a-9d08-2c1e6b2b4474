@@ -21,6 +21,12 @@ CREATE POLICY "key shares insert" ON public.family_key_shares
       WHERE d.id = family_key_shares.device_id
         AND d.revoked_at IS NULL
         AND fm.family_id = family_key_shares.family_id
+        AND EXISTS (
+          SELECT 1 FROM public.family_keys fk
+          WHERE fk.family_id = family_key_shares.family_id
+            AND fk.version = family_key_shares.version
+            AND fk.created_at >= fm.joined_at
+        )
         AND (
           public.is_family_admin(family_key_shares.family_id)
           OR d.user_id = auth.uid()
