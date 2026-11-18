@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, Lock, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
+import { Loader2, Lock, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FamilyGate, type FamilyCtx } from "@/components/family/FamilyGate";
 import { MediaView } from "@/components/family/MediaView";
@@ -59,7 +59,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
       return data;
     },
   });
-  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id));
+  const keys = useFamilyKeys(familyId, userId, members.data?.map((m) => m.user_id), isAdmin);
   const e2ee = keys.data;
   const plain = useQuery({
     queryKey: ["decrypted", familyId, ids.join(","), e2ee ? [...e2ee.keys.keys()].join(",") : ""],
@@ -156,7 +156,10 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
     if (!confirm("Удалить сообщение для всех?")) return;
     const { error } = await supabase.from("messages").delete().eq("id", m.id);
     if (error) { toast.error(errText(error)); return; }
-    if (m.media_path && m.user_id === userId) await supabase.storage.from("family-media").remove([m.media_path]);
+    if (m.media_path && (m.user_id === userId || isAdmin)) {
+      const { error: mediaError } = await supabase.storage.from("family-media").remove([m.media_path]);
+      if (mediaError) toast.error("Сообщение удалено, но вложение не удалось удалить");
+    }
     invalidate("messages");
   }
 
@@ -176,13 +179,6 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
         <p className="flex-1 truncate text-sm text-muted-foreground">{members.data?.length ?? "…"} чел. в семье</p>
         <Button variant="ghost" size="icon" aria-label="Поиск по сообщениям" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}><Search /></Button>
       </div>
-      {keys.isError ? (
-        <p className="border-b px-3 py-1 text-xs text-destructive" role="alert">Не удалось подготовить чат. Обновите страницу или попробуйте позже.</p>
-      ) : e2ee?.status === "unsupported" ? (
-        <p className="border-b px-3 py-1 text-xs text-destructive" role="alert">Браузер не поддерживает защищённую переписку.</p>
-      ) : e2ee?.status === "waiting" ? (
-        <p className="border-b px-3 py-1 text-xs text-muted-foreground" role="status"><KeyRound className="mr-1 inline size-3" aria-hidden />Подключаем это устройство к защищённому чату. Пока доступны фото и видео.</p>
-      ) : null}
       {searchOpen && (
         <div className="border-b bg-card p-3">
           <p className="mb-2 text-xs text-muted-foreground">Поиск идёт только по загруженным сообщениям на этом устройстве.</p>
@@ -295,7 +291,7 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} tabIndex={-1} aria-hidden />
             <Button type="button" variant="outline" size="icon" aria-label="Прикрепить фото или видео" onClick={() => fileRef.current?.click()} disabled={sending}><Paperclip /></Button>
             <textarea
-              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder="Напишите сообщение…" aria-label="Текст сообщения"
+              value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={1} placeholder={canSendText ? "Напишите сообщение…" : "Можно написать сейчас — отправка после получения ключа"} aria-label="Текст сообщения"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               className="max-h-40 min-h-11 flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
