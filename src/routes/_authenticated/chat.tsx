@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, Lock, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
+import { Loader2, Lock, Paperclip, Reply, Search, SendHorizonal, SmilePlus, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FamilyGate, type FamilyCtx } from "@/components/family/FamilyGate";
 import { MediaView } from "@/components/family/MediaView";
@@ -176,13 +176,6 @@ function Chat({ ctx }: { ctx: FamilyCtx }) {
         <p className="flex-1 truncate text-sm text-muted-foreground">{members.data?.length ?? "…"} чел. в семье</p>
         <Button variant="ghost" size="icon" aria-label="Поиск по сообщениям" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}><Search /></Button>
       </div>
-      {keys.isError ? (
-        <p className="border-b px-3 py-1 text-xs text-destructive" role="alert">Не удалось подготовить чат. Обновите страницу или попробуйте позже.</p>
-      ) : e2ee?.status === "unsupported" ? (
-        <p className="border-b px-3 py-1 text-xs text-destructive" role="alert">Браузер не поддерживает защищённую переписку.</p>
-      ) : e2ee?.status === "waiting" ? (
-        <p className="border-b px-3 py-1 text-xs text-muted-foreground" role="status"><KeyRound className="mr-1 inline size-3" aria-hidden />Подключаем это устройство к защищённому чату. Пока доступны фото и видео.</p>
-      ) : null}
       {searchOpen && (
         <div className="border-b bg-card p-3">
           <p className="mb-2 text-xs text-muted-foreground">Поиск идёт только по загруженным сообщениям на этом устройстве.</p>
